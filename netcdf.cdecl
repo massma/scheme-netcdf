@@ -1,0 +1,9 @@
+#| -*-Scheme-*-
+
+C declarations for netcdf.scm. |#
+
+(extern (* char) nc_inq_libvers)
+(extern (* char) nc_open
+        (path (* char))
+        (mode int)
+        (ncidp (* int)))
