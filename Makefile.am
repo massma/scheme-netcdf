@@ -30,7 +30,7 @@ scmlibdir = $(libdir)/mit-scheme-@MIT_SCHEME_ARCH@
 scmlib_LTLIBRARIES = netcdf-shim.la
 scmlib_DATA = netcdf-types.bin netcdf-const.bin
 
-AM_CPPFLAGS = -I/home/adam/software/mit-scheme/src/lib
+AM_CPPFLAGS = -I$(MITSCHEME_ROOT)/src/lib
 
 netcdf_shim_la_LIBADD = netcdf.lo
 netcdf_shim_la_LDFLAGS = -module -avoid-version -shared -lnetcdf

@@ -25,23 +25,30 @@ USA.
 |#
 
 ;;;; Build and test the test plugin.
+(load-option 'ffi)
 
 (load-option 'synchronous-subprocess)
-(with-working-directory-pathname (directory-pathname (current-load-pathname))
-  (lambda ()
-    (let ((port (notification-output-port)))
-      (fresh-line port)
-      (write-string "./autobuild.sh in src/netcdf/" port)
-      (newline port))
-    (let ((status (run-synchronous-subprocess "sh" '("./autobuild.sh"))))
-      (if (not (zero? status))
-	  (error "Test FFI build failed:" status)))
-    (define-test 'ffi
-      (let ((cwd (working-directory-pathname)))
-	(named-lambda (test-netcdf)
-	  (with-working-directory-pathname cwd
-	    (lambda ()
-	      (let ((status
-		     (run-synchronous-subprocess "sh" '("./test-netcdf.sh"))))
-		(if (not (zero? status))
-		    (error "Test FFI check failed:" status))))))))))
+(with-working-directory-pathname
+ (directory-pathname (pwd)) ;(current-load-pathname) - if loading file
+ (lambda ()
+   (let ((port (notification-output-port)))
+     (fresh-line port)
+     (write-string "./autobuild.sh in src/netcdf/" port)
+     (newline port))
+   (let ((status (run-synchronous-subprocess "sh" '("./autobuild.sh"))))
+     (if (not (zero? status))
+         (error "Test FFI build failed:" status)))))
+
+
+(C-include "netcdf")
+
+(define string (let* ((alien (make-alien-to-free
+                              '(* char)
+                              (lambda (retval)
+                                (C-call "nc_inq_libvers" retval))))
+                      (new (c-peek-cstring alien)))
+                 (if (string? new)
+                     new
+                     (utf8->string new))))
+(display string)
+;; should write version

@@ -5,10 +5,9 @@ Playing around with MIT/GNU Scheme's FFI, with the goal of getting netcdf functi
 ### Requisites ###
 
 1. netcdf libraries installed
-2. develpment version of mit-scheme (http://git.savannah.gnu.org/cgit/mit-scheme.git/) (note this is important, the FFI interface is still in devleopment and has been updates since stable version 9.2)
-
+2. development version of mit-scheme (http://git.savannah.gnu.org/cgit/mit-scheme.git/) (note this is important, the FFI interface is still in development and has been updates since stable version 9.2)
+3. set an environmental variable "MITSCHEME_ROOT" which points to the top level of your scheme (i.e. where src/ lib/ bin/ etc. directories are).
 ### Instructions ###
 
-load "run-tests.scm" into scheme, and it should build and run tests.
+run  "install-netcdf.scm" into scheme, and it should build and run a simple test of printing the netcdf library version.
 
-Note that right now it won't work without modification, I foolishly hard coded some me-specific paths in the makefiles. If I develop this to the point its useful, I will use mit-scheme environmental variables to make the paths more universal. 
