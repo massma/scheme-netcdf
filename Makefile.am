@@ -30,7 +30,7 @@ scmlibdir = $(libdir)/mit-scheme-@MIT_SCHEME_ARCH@
 scmlib_LTLIBRARIES = netcdf-shim.la
 scmlib_DATA = netcdf-types.bin netcdf-const.bin
 
-AM_CPPFLAGS = -I$(MITSCHEME_ROOT)/src/lib
+AM_CPPFLAGS = -Wall -I$(MITSCHEME_ROOT)/src/lib
 
 netcdf_shim_la_LIBADD = netcdf.lo
 netcdf_shim_la_LDFLAGS = -module -avoid-version -shared -lnetcdf
@@ -42,8 +42,9 @@ netcdf-shim.c netcdf-const.c netcdf-types.bin: netcdf.cdecl netcdf.lo
 	echo '(generate-shim "netcdf" "#include \"netcdf.h\"")' \
 	| $(MIT_SCHEME_EXE) --batch-mode
 
+# -I/usr/include -I/usr/include/hdf5/serial
 netcdf.lo: netcdf.c
-	libtool --mode=compile $(CC) -I$(AUXDIR) -I/usr/include -I/usr/include/hdf5/serial -Wall -fPIC `pkg-config --cflags netcdf` -o $@ -c $<
+	libtool --mode=compile $(CC) -I./ -I$(AUXDIR) -Wall -fPIC `pkg-config --cflags netcdf` -o $@ -c $<
 
 netcdf-const.bin: netcdf-const.scm
 	echo '(sf "netcdf-const")' | $(MIT_SCHEME_EXE) --batch-mode

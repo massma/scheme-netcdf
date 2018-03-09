@@ -3,7 +3,14 @@
 C declarations for netcdf.scm. |#
 
 (extern (* char) nc_inq_libvers)
-(extern (* char) nc_open
+
+(extern int nc_open
         (path (* char))
         (mode int)
         (ncidp (* int)))
+
+(extern int test
+        (path (* char))
+        (ncidp (* int)))
+
+
