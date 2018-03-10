@@ -117,18 +117,19 @@
        (alien-mode (malloc (c-sizeof "int") 'int))
        (alien-ncid (malloc (* 2 (c-sizeof "int")) 'int)))
   (display "test")
-  (C-call "nc_open"
-          (->cstring (string-append
-                      "/home/adam/scratch/data/"
-                      "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))
-          0
-          alien-ncid)
-  (display "test"))
-  ;; (if (alien-null? alien-ncid)
-  ;;     (display "eroor could't open")
-  ;;     (display "did it")))
-  ;;(C-> alien-ncid "int" alien-ncid)
-  ;; (C-call "nc_close" alien-ncid)
-  ;; alien-out)
+  (define out (C-call "nc_open"
+                      (->cstring (string-append
+                                  "/home/adam/scratch/data/"
+                                  "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))
+                      0
+                      alien-ncid))
+  (display "test")
+  (newline) (display out)
+  (if (alien-null? alien-ncid)
+      (display "eroor could't open")
+      (display "did it"))
+  (newline) (display (C-> alien-ncid "int"))
+  (define out2 (C-call "nc_close" (C-> alien-ncid "int")))
+  (newline) (display out2))
 
 ;; maybe try that alloc bytevector thing with char
