@@ -95,25 +95,47 @@
                        (utf8->string new)))))
 (display string)
 
-(define ncid (let* ((alien-out (make-alien))
+;;"/home/adam/scratch/data/isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"
+(C-include "netcdf")
+(define ncid (let* ((alien-out (make-alien 'int))
                     (bytevector (string->utf8
                                  (string-append
                                   "/home/adam/scratch/data/"
                                   "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
+                    ;; (chars (make-alien '(* char)))
                     (chars (malloc (1+ (* (c-sizeof "char")
                                           (bytevector-length bytevector)))
                                    '(* char)))
-                    (alien-mode (make-alien 'int))
-                    (alien-ncid (make-alien)))
-               (c-call "test"
+                    (alien-mode (malloc (c-sizeof "int") 'int))
+                    (alien-ncid (make-alien '(* int))))
+               (c-poke-string chars bytevector)
+               (c->= alien-mode "int" 0)
+               (display (c-peek-cstring chars))
+               (newline)
+               (display (c-> alien-mode "int"))
+               (newline)
+               (display "test")
+               (newline)
+               (display alien-out)
+               (newline)
+               (display chars)
+               (newline)
+               (display alien-ncid)
+               (C-call "nc_open"
                        alien-out
-                       (string->utf8 (string-append
-                                      "/home/adam/scratch/data/"
-                                      "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))
+                       chars
+                       0 ; alien-mode
                        alien-ncid)
-              (if (alien-null? alien-out)
-                  (display "eroor could't open"))
-              alien-ncid))
+               (display "test")
+               (if (alien-null? alien-ncid)
+                   (display "eroor could't open")
+                   (display "did it"))
+               ;;(C-> alien-ncid "int" alien-ncid)
+               (C-call "nc_close" alien-ncid)
+               alien-out))
+
+;; maybe try that alloc bytevector thing with char
+
 
 
 

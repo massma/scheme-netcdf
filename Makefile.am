@@ -42,9 +42,9 @@ netcdf-shim.c netcdf-const.c netcdf-types.bin: netcdf.cdecl netcdf.lo
 	echo '(generate-shim "netcdf" "#include \"netcdf.h\"")' \
 	| $(MIT_SCHEME_EXE) --batch-mode
 
-# -I/usr/include -I/usr/include/hdf5/serial
+
 netcdf.lo: netcdf.c
-	libtool --mode=compile $(CC) -I./ -I$(AUXDIR) -Wall -fPIC `pkg-config --cflags netcdf` -o $@ -c $<
+	libtool --mode=compile $(CC) -I$(AUXDIR) -I/usr/include -I/usr/include/hdf5/serial -Wall -fPIC `pkg-config --cflags netcdf` -o $@ -c $<
 
 netcdf-const.bin: netcdf-const.scm
 	echo '(sf "netcdf-const")' | $(MIT_SCHEME_EXE) --batch-mode

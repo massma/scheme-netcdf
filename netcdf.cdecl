@@ -9,8 +9,7 @@ C declarations for netcdf.scm. |#
         (mode int)
         (ncidp (* int)))
 
-(extern int test
-        (path (* char))
-        (ncidp (* int)))
+(extern int nc_close
+        (ncid int))
 
 
