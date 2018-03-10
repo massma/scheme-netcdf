@@ -22,7 +22,7 @@
 ## Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 ## USA.
 
-ACLOCAL_AMFLAGS = -I m4
+ACLOCAL_AMFLAGS = -I m4 -I/usr/include
 
 MIT_SCHEME_EXE = @MIT_SCHEME_EXE@
 scmlibdir = $(libdir)/mit-scheme-@MIT_SCHEME_ARCH@

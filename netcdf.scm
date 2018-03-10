@@ -2,16 +2,6 @@
 (load-option 'ffi)
 (C-include "netcdf")
 
-(define string (let* ((alien (make-alien-to-free
-                              '(* char)
-                              (lambda (retval)
-                                (C-call "nc_inq_libvers" retval))))
-                      (new (c-peek-cstring alien)))
-                 (if (string? new)
-                     new
-                     (utf8->string new))))
-(display string)
-
 ;;;; This uses ncdump to take a quick look at file contents
 (define (make-metadata filename)
   (let*
@@ -95,48 +85,50 @@
                        (utf8->string new)))))
 (display string)
 
+;; lefted crom x11-base.scm
+(define (->cstring string)
+  (cond ((and (integer? string) (zero? string))
+	 0)
+	((bytevector? string)
+	 (if (let ((end (bytevector-length string)))
+	       (let loop ((i 0))
+		 (if (fix:< i end)
+		     (or (fix:zero? (bytevector-u8-ref string i))
+			 (loop (fix:1+ i)))
+		     #f)))
+	     string
+	     (error "C string not null terminated:" string)))
+	((string? string)
+	 ;; String->iso8859-1 would be incorrect; it does not null terminate.
+	 (let* ((end (string-length string))
+		(result (make-bytevector (fix:1+ end))))
+	   (do ((i 0 (fix:1+ i)))
+	       ((not (fix:< i end))
+		(bytevector-u8-set! result i #x00))
+	     (bytevector-u8-set! result i (char->integer
+					   (string-ref string i))))
+	   result))
+	(else
+	 (error:wrong-type-argument string "a string or 0" '->cstring))))
+
 ;;"/home/adam/scratch/data/isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"
 (C-include "netcdf")
-(define ncid (let* ((alien-out (make-alien 'int))
-                    (bytevector (string->utf8
-                                 (string-append
-                                  "/home/adam/scratch/data/"
-                                  "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
-                    ;; (chars (make-alien '(* char)))
-                    (chars (malloc (1+ (* (c-sizeof "char")
-                                          (bytevector-length bytevector)))
-                                   '(* char)))
-                    (alien-mode (malloc (c-sizeof "int") 'int))
-                    (alien-ncid (make-alien '(* int))))
-               (c-poke-string chars bytevector)
-               (c->= alien-mode "int" 0)
-               (display (c-peek-cstring chars))
-               (newline)
-               (display (c-> alien-mode "int"))
-               (newline)
-               (display "test")
-               (newline)
-               (display alien-out)
-               (newline)
-               (display chars)
-               (newline)
-               (display alien-ncid)
-               (C-call "nc_open"
-                       alien-out
-                       chars
-                       0 ; alien-mode
-                       alien-ncid)
-               (display "test")
-               (if (alien-null? alien-ncid)
-                   (display "eroor could't open")
-                   (display "did it"))
-               ;;(C-> alien-ncid "int" alien-ncid)
-               (C-call "nc_close" alien-ncid)
-               alien-out))
+(let* ((alien-out (make-alien 'int))
+       (alien-mode (malloc (c-sizeof "int") 'int))
+       (alien-ncid (malloc (* 2 (c-sizeof "int")) 'int)))
+  (display "test")
+  (C-call "nc_open"
+          (->cstring (string-append
+                      "/home/adam/scratch/data/"
+                      "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))
+          0
+          alien-ncid)
+  (display "test"))
+  ;; (if (alien-null? alien-ncid)
+  ;;     (display "eroor could't open")
+  ;;     (display "did it")))
+  ;;(C-> alien-ncid "int" alien-ncid)
+  ;; (C-call "nc_close" alien-ncid)
+  ;; alien-out)
 
 ;; maybe try that alloc bytevector thing with char
-
-
-
-
-
