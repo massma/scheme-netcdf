@@ -34,3 +34,6 @@ netcdf-types.bin
 netcdf.lo
 netcdf.o
 stamp-h1
+*.bci
+*.bin
+*.com

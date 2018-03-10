@@ -79,13 +79,6 @@
 
 
 ;; testing
-(define meta (make-metadata
-              (string-append "/home/adam/scratch/data/"
-                             "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
-(display (get-filepath meta))
-(define dims (get-dimensions meta))
-(define vars (get-variables meta))
-(define attrs (get-attributes meta))
 
 ;;; now we try loading with c lib
 
