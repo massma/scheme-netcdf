@@ -117,10 +117,11 @@
        (alien-mode (malloc (c-sizeof "int") 'int))
        (alien-ncid (malloc (* 2 (c-sizeof "int")) 'int)))
   (display "test")
-  (define out (C-call "nc_open"
-                      (->cstring (string-append
-                                  "/home/adam/scratch/data/"
-                                  "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))
+  (define out
+    (C-call "nc_open"
+            (->cstring (string-append
+                        "/home/adam/scratch/data/"
+                        "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))
                       0
                       alien-ncid))
   (display "test")
