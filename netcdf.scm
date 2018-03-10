@@ -88,8 +88,6 @@
 (define attrs (get-attributes meta))
 
 ;;; now we try loading with c lib
-(load-option 'ffi)
-(C-include "netcdf")
 
 ;; lifted from x11-base.scm
 (define (->cstring string)
@@ -163,8 +161,6 @@
           (else (error "unspecified response")))
     alien-var))
 
-
-
 (define (alien-array->vector alien nelements process)
   (let ((vec (make-vector nelements -99999.0)))
     ;; below using cons maximum recursion depth is exceeded
@@ -195,33 +191,5 @@
 
 ;; (define vec (alien-array->vector alien-var nelements irwin-processor))
 ;; (define vec-list (vector->list vec))
-
-(define ncid (load-ncid (string-append
-                         "/home/adam/scratch/data/"
-                         "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
-(define varid (load-varid ncid "irwin_cdr"))
-(define nelements 10286000)
-(define alien-var (load-var ncid varid 10286000))
-
-(define vec-list (alien-array->list alien-var nelements irwin-processor))
-;;(define vec-list (alien-array->list alien-var nelements (lambda (x) x)))
-
-(define nan-filtered (filter (lambda (x) (not (flo:nan? x)))
-                           vec-list))
-(define inf-filtered (filter flo:finite?
-                             nan-filtered))
-
-(define two00s (filter (lambda (x) (eqv? 200.0 x)) inf-filtered))
-(let* ((ntotal (length vec-list))
-       (nnan (- ntotal (length nan-filtered)))
-       (noutside (- ntotal nnan (length inf-filtered))))
-  (newline) (display "number of nans: ") (display (inexact (/ nnan ntotal)))
-  (newline) (display "number ouside of range: ")
-  (display (inexact (/ noutside ntotal)))
-  (newline) (display "number obbs=200.0: ") (display (length two00s)))
-
-
-
-
 ;;(close-ncid ncid)
 
