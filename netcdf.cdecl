@@ -12,4 +12,14 @@ C declarations for netcdf.scm. |#
 (extern int nc_close
         (ncid int))
 
+(extern int nc_get_var_short
+        (ncid int)
+        (varid int)
+        (ip (* short)))
+
+(extern int nc_inq_varid
+        (ncid int)
+        (name (* (const char)))
+        (varid (* int)))
+
 

@@ -37,18 +37,17 @@ USA.
      (newline port))
    (let ((status (run-synchronous-subprocess "sh" '("./autobuild.sh"))))
      (if (not (zero? status))
-         (error "Test FFI build failed:" status)))))
+         (error "netcdf build failed:" status)))))
 
 
 (C-include "netcdf")
+(display (let* ((alien (make-alien
+                        '(* char))))
+           (C-call "nc_inq_libvers" alien)
+           (let ((new (c-peek-cstring alien)))
+             (if (alien-null? alien)
+                 (error "Could not open-file."))
+             (if (string? new)
+                 new
+                 (utf8->string new)))))
 
-(define string (let* ((alien (make-alien-to-free
-                              '(* char)
-                              (lambda (retval)
-                                (C-call "nc_inq_libvers" retval))))
-                      (new (c-peek-cstring alien)))
-                 (if (string? new)
-                     new
-                     (utf8->string new))))
-(display string)
-;; should write version

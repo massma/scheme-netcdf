@@ -1,10 +1,10 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([MIT/GNU Scheme test-ffi plugin],
-        [0.1],
-        [bug-mit-scheme@gnu.org],
-        [mit-scheme-test-ffi])
+AC_INIT([MIT/GNU Scheme netcdf plugin],
+        [0.01],
+        [akm2203@columbia.edu],
+        [mit-scheme-netcdf])
 AC_CONFIG_SRCDIR([netcdf.cdecl])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])

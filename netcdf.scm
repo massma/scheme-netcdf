@@ -2,6 +2,24 @@
 (load-option 'ffi)
 (C-include "netcdf")
 
+(define (zero)
+  (identity-procedure 0.))
+
+(define nan
+  (flo:with-exceptions-untrapped (flo:exception:invalid-operation)
+                                 (lambda ()
+                                   (flo:/ (zero) (zero)))))
+
+(define inf+
+  (flo:with-exceptions-untrapped (flo:exception:divide-by-zero)
+    (lambda ()
+      (flo:/ +1. (zero)))))
+
+(define inf-
+  (flo:with-exceptions-untrapped (flo:exception:divide-by-zero)
+    (lambda ()
+      (flo:/ -1. (zero)))))
+
 ;;;; This uses ncdump to take a quick look at file contents
 (define (make-metadata filename)
   (let*
@@ -69,23 +87,11 @@
 (define vars (get-variables meta))
 (define attrs (get-attributes meta))
 
-
 ;;; now we try loading with c lib
 (load-option 'ffi)
 (C-include "netcdf")
 
-(define string (let* ((alien (make-alien
-                              '(* char))))
-                 (C-call "nc_inq_libvers" alien)
-                 (let ((new (c-peek-cstring alien)))
-                   (if (alien-null? alien)
-                       (error "Could not open-file."))
-                   (if (string? new)
-                       new
-                       (utf8->string new)))))
-(display string)
-
-;; lefted crom x11-base.scm
+;; lifted from x11-base.scm
 (define (->cstring string)
   (cond ((and (integer? string) (zero? string))
 	 0)
@@ -112,25 +118,110 @@
 	 (error:wrong-type-argument string "a string or 0" '->cstring))))
 
 ;;"/home/adam/scratch/data/isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"
-(C-include "netcdf")
-(let* ((alien-out (make-alien 'int))
-       (alien-mode (malloc (c-sizeof "int") 'int))
-       (alien-ncid (malloc (* 2 (c-sizeof "int")) 'int)))
-  (display "test")
-  (define out
-    (C-call "nc_open"
-            (->cstring (string-append
-                        "/home/adam/scratch/data/"
-                        "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))
-                      0
-                      alien-ncid))
-  (display "test")
-  (newline) (display out)
-  (if (alien-null? alien-ncid)
-      (display "eroor could't open")
-      (display "did it"))
-  (newline) (display (C-> alien-ncid "int"))
-  (define out2 (C-call "nc_close" (C-> alien-ncid "int")))
-  (newline) (display out2))
 
-;; maybe try that alloc bytevector thing with char
+(define (load-ncid filename)
+  (let* ((alien-ncid (malloc (* 2 (c-sizeof "int")) 'int))
+         (out (C-call "nc_open" (->cstring filename) 0 alien-ncid)))
+    (cond ((= 0 out) (display "loading ncid sucessful"))
+          ((= -61 out) (error "not enough memory" filename))
+          ((= -101 out) (error "Error at HDF5 layer" filename))
+          ((= -106 out) (error "Problem with dimension metadata" filename))
+          ((alien-null? alien-ncid)
+           (error "could't open file-unspecified reason" filename))
+          (else (error "unspecified response")))
+    (C-> alien-ncid "int")))
+
+(define (load-varid ncid var-name)
+  (let* ((alien-varid (malloc (* 2 (c-sizeof "int")) 'int))
+         (out (C-call "nc_inq_varid" ncid (->cstring var-name) alien-varid)))
+    (cond ((= 0 out) (display "loading varid sucessful"))
+          ((= -33 out) (error "Not a netcdf id." ncid))
+          ((alien-null? alien-varid)
+           (error "could't open file-unspecified reason" ncid))
+          (else (error "unspecified response")))
+    (C-> alien-varid "int")))
+
+(define (close-ncid ncid)
+  ;; this is dangerous, introduces state :(
+  (let ((out (C-call "nc_close" ncid)))
+    (cond ((= 0 out) (display "closing sucessful"))
+          ((= -33 out) (error "Not a netcdf id." ncid))
+          ((= -116 out) (error "Bad group ID." ncid))
+          (else (error "unspecified response")))
+    #f))
+
+(define (load-var ncid varid nelements)
+  (let* ((alien-var (malloc (* 2 nelements (c-sizeof "short")) 'short))
+         (out (c-call "nc_get_var_short" ncid varid alien-var)))
+    (cond ((= 0 out) (display "loading var sucessful"))
+          ((= -49 out) (error "Variable not found" varid))
+          ((= -60 out) (error "Math result not representable" varid))
+          ((= -39 out) (error "Operation not allowed in define mode" varid))
+          ((= -33 out) (error "Not a netcdf id" varid))
+          ((alien-null? alien-ncid)
+           (error "could't load var- unspecified reason" varid))
+          (else (error "unspecified response")))
+    alien-var))
+
+
+
+(define (alien-array->vector alien nelements process)
+  (let ((vec (make-vector nelements -99999.0)))
+    ;; below using cons maximum recursion depth is exceeded
+    (let loop ((n 0))
+      (if (< n nelements)
+          (let ((short (C-> alien "short")))
+            (vector-set! vec n (process short))
+            (C-array-loc! alien "short" 1)
+            (loop (1+ n)))))
+    vec))
+;; below you need large stack allocation to avoid
+;; max recursion depth
+(define (alien-array->list alien nelements process)
+  (let loop ((n 0))
+    (if (< n nelements)
+        (let ((short (C-> alien "short")))
+          (C-array-loc! alien "short" 1)
+          (cons (process short) (loop (1+ n))))
+        '())))
+
+(define (irwin-processor element)
+  (if (eqv? element -31999)
+      nan
+      (let ((value (+ 200.0 (* element 0.01))))
+        (if (or (< value 140.0) (> value 375.0))
+            inf-;;(error "value out of expected range")
+            value))))
+
+;; (define vec (alien-array->vector alien-var nelements irwin-processor))
+;; (define vec-list (vector->list vec))
+
+(define ncid (load-ncid (string-append
+                         "/home/adam/scratch/data/"
+                         "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
+(define varid (load-varid ncid "irwin_cdr"))
+(define nelements 10286000)
+(define alien-var (load-var ncid varid 10286000))
+
+(define vec-list (alien-array->list alien-var nelements irwin-processor))
+;;(define vec-list (alien-array->list alien-var nelements (lambda (x) x)))
+
+(define nan-filtered (filter (lambda (x) (not (flo:nan? x)))
+                           vec-list))
+(define inf-filtered (filter flo:finite?
+                             nan-filtered))
+
+(define two00s (filter (lambda (x) (eqv? 200.0 x)) inf-filtered))
+(let* ((ntotal (length vec-list))
+       (nnan (- ntotal (length nan-filtered)))
+       (noutside (- ntotal nnan (length inf-filtered))))
+  (newline) (display "number of nans: ") (display (inexact (/ nnan ntotal)))
+  (newline) (display "number ouside of range: ")
+  (display (inexact (/ noutside ntotal)))
+  (newline) (display "number obbs=200.0: ") (display (length two00s)))
+
+
+
+
+;;(close-ncid ncid)
+
