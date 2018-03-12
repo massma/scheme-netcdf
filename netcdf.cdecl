@@ -2,7 +2,7 @@
 
 C declarations for netcdf.scm. |#
 
-(extern (* char) nc_inq_libvers)
+(extern (* (const char)) nc_inq_libvers)
 
 (extern int nc_open
         (path (* (const char)))
@@ -32,3 +32,27 @@ C declarations for netcdf.scm. |#
         (nattsp  (* int))) 	
 
 (typedef nc_type int)
+
+;; need to check stddef.h of compiler to make
+;; sure this type definition matches
+(typedef size_t ulong)
+
+(extern int nc_inq_dim
+        (ncid int)
+        (dimid int)
+        (name (* char))
+        (lenp (* size_t)))
+
+(extern int nc_inq_att
+        (ncid int)
+        (varid int)
+        (name (* (const char)))
+        (xtypep (* nc_type))
+        (lenp (* size_t)))
+
+(extern int nc_inq_attname
+        (ncid int)
+        (varid int)
+        (attnum int)
+        (name (* char)))
+

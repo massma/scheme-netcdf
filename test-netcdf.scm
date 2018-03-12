@@ -8,28 +8,29 @@
                     (string-append
                      "/home/adam/scratch/data/"
                      "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
-         (varid (load-varid metadata "irwin_cdr"))
+         (var-meta (load-var-meta metadata "irwin_cdr"))
          (nelements 10286000)
-         (alien-var (load-var metadata varid 10286000)))
+         ;;(alien-var (load-var var-metadata))
+         )
     ;; ;
-    (with-timings
-     (lambda () (let ((alien-var (load-var metadata varid 10286000)))
-                  (define vec-list
-                    (map irwin-processor
-                         (alien-array->list
-                          alien-var
-                          nelements
-                          (lambda (x) (c-> x "short"))
-                          (lambda (x) (c-array-loc! x "short" 1)))))))
-     (lambda (run-time gc-time real-time)
-       (newline) (display "run time: ")
-       (write (internal-time/ticks->seconds run-time))
-       (write-char #\space) (newline) (display "gc time: ")
-       (write (internal-time/ticks->seconds gc-time))
-       (write-char #\space) (newline) (display "wall time: ")
-       (write (internal-time/ticks->seconds real-time))
-       (newline)))
-    (define out (load-var-meta metadata varid))
+    ;; (with-timings
+    ;;  (lambda () (let ((alien-var (load-var metadata varid 10286000)))
+    ;;               (define vec-list
+    ;;                 (map irwin-processor
+    ;;                      (alien-array->list
+    ;;                       alien-var
+    ;;                       nelements
+    ;;                       short-peek
+    ;;                       short-advance)))))
+    ;;  (lambda (run-time gc-time real-time)
+    ;;    (newline) (display "run time: ")
+    ;;    (write (internal-time/ticks->seconds run-time))
+    ;;    (write-char #\space) (newline) (display "gc time: ")
+    ;;    (write (internal-time/ticks->seconds gc-time))
+    ;;    (write-char #\space) (newline) (display "wall time: ")
+    ;;    (write (internal-time/ticks->seconds real-time))
+    ;;    (newline)))
+    (define out var-meta)
     (close-ncid metadata)
     out))
 
@@ -59,3 +60,4 @@
 ;; (define dims (get-dimensions meta))
 ;; (define vars (get-variables meta))
 ;; (define attrs (get-attributes meta))
+;; (pp load-var-meta)

@@ -99,7 +99,7 @@
 	 (error:wrong-type-argument string "a string or 0" '->cstring))))
 
 (define (load-ncid filename)
-  (let* ((alien-ncid (malloc (* 2 (c-sizeof "int")) 'int))
+  (let* ((alien-ncid (malloc (c-sizeof "int") 'int))
          (out (C-call "nc_open" (->cstring filename) 0 alien-ncid)))
     (cond ((= 0 out) (newline) (display "loading ncid sucessful"))
           ((= -61 out) (error "not enough memory" filename))
@@ -111,7 +111,7 @@
     (C-> alien-ncid "int")))
 
 (define (load-varid metadata var-name)
-  (let* ((alien-varid (malloc (* 2 (c-sizeof "int")) 'int))
+  (let* ((alien-varid (malloc (c-sizeof "int") 'int))
          (ncid (get-meta-element 'ncid metadata))
          (out (C-call "nc_inq_varid" ncid (->cstring var-name) alien-varid)))
     (cond ((= 0 out) (newline) (display "loading varid sucessful"))
@@ -122,7 +122,7 @@
     (C-> alien-varid "int")))
 
 (define (close-ncid metadata)
-  ;; this is dangerous, introduces state :(
+  ;; this is dangerous, introduces state, :(, run when done w/ file
   (let* ((ncid (get-meta-element 'ncid metadata))
          (out (C-call "nc_close" ncid)))
     (cond ((= 0 out) (newline) (display "closing sucessful"))
@@ -133,7 +133,7 @@
 
 (define (load-var metadata varid nelements)
   (let* ((ncid (get-meta-element 'ncid metadata))
-         (alien-var (malloc (* 2 nelements (c-sizeof "short")) 'short))
+         (alien-var (malloc (* nelements (c-sizeof "short")) 'short))
          (out (c-call "nc_get_var_short" ncid varid alien-var)))
     (cond ((= 0 out) (newline) (display "loading var sucessful"))
           ((= -49 out) (error "Variable not found" varid))
@@ -167,14 +167,15 @@
           (cons value (loop (1+ n))))
         '())))
 
-(define (load-var-meta metadata varid)
+(define (load-var-meta metadata varname)
   (let* ((ncid (get-meta-element 'ncid metadata))
+         (varid (load-varid metadata varname))
          (alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
-         (alien-xtype (malloc (* 2 (c-sizeof "int")) 'nc_type))
-         (alien-ndims (malloc (* 2 (c-sizeof "int")) 'int))
+         (alien-xtype (malloc (c-sizeof "int") 'nc_type))
+         (alien-ndims (malloc (c-sizeof "int") 'int))
          ;; below max 10 dims, but should really call to get ndims first
-         (alien-dimids (malloc (* 10 2 (c-sizeof "int")) 'int))
-         (alien-natts (malloc (* 2 (c-sizeof "int")) 'int))
+         (alien-dimids (malloc (* 10 (c-sizeof "int")) 'int))
+         (alien-natts (malloc (c-sizeof "int") 'int))
          (out (c-call "nc_inq_var" ncid varid alien-name
                       alien-xtype alien-ndims alien-dimids
                       alien-natts)))
@@ -184,24 +185,83 @@
           ((alien-null? alien-ndims)
            (error "could't load var- unspecified reason" varid))
           (else (error "unspecified response")))
-    (make-var-structure metadata alien-name alien-xtype alien-ndims
-                        alien-dimids alien-natts)))
+    (let* ((var-meta
+           (make-var-structure metadata varid alien-name alien-xtype alien-ndims
+                               alien-dimids alien-natts))
+           (var-meta (load-dims var-meta))
+           (var-meta (load-attnames var-meta)))
+      var-meta)))
 
-(define (make-var-structure metadata alien-name alien-xtype alien-ndims
+(define (make-var-structure metadata varid alien-name alien-xtype alien-ndims
                             alien-dimids alien-natts)
   (let ((ndims (c-> alien-ndims "int") ))
     `((filename . ,(get-meta-element 'filename metadata))
       (ncid . ,(get-meta-element 'ncid metadata))
       (name . ,(alien->string alien-name))
+      (varid . ,varid)
       (xtype . ,(alien->type alien-xtype))
       (ndims . ,ndims)
       (dimids . ,(alien-array->list alien-dimids ndims
                                     (lambda (x) (c-> x "int"))
-                                    (lambda (x) (C-array-loc! x "int" 1))))
+                                    (lambda (x) (c-array-loc! x "int" 1))))
       (natts . ,(c-> alien-natts "int")))))
+
+(define (pair key value)
+  `(,key . ,value))
 
 (define (add-var-structure key value var-structure)
   (cons (pair key value) var-structure))
+
+(define (key-exists? key structure)
+  (assoc key structure))
+
+(define (load-dims var-meta)
+  (if (key-exists? 'dims var-meta)
+      (error "Called load-dims but dims already exists" var-meta)
+      (add-var-structure
+       'dims
+       (map (lambda (dimid)
+              (load-dim (get-var-element 'ncid var-meta) dimid))
+            (get-var-element 'dimids var-meta))
+       var-meta)))
+
+(define (load-dim ncid dimid)
+  (let* ((alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
+        (alien-len (malloc (c-sizeof "ulong") '(* size_t)))
+        (out (c-call "nc_inq_dim" ncid dimid alien-name alien-len)))
+    (cond ((= 0 out) (newline) (display "loading var sucessful"))
+          ((= -46 out) (error "Bad dim name" dimid))
+          ((= -33 out) (error "Not a netcdf id" ncid))
+          ((alien-null? alien-len)
+           (error "could't load var- unspecified reason" varid))
+          (else (error "unspecified response")))
+    (pair (alien->string alien-name) (c-> alien-len "ulong"))))
+
+(define (load-attnames var-meta)
+  (if (key-exists? 'att-names var-meta)
+      (error "Called load-attname but attname already exists" var-meta)
+      (add-var-structure
+       'att-names
+       (map (lambda (attnum)
+              (load-attname (get-var-element 'ncid var-meta)
+                            (get-var-element 'varid var-meta)
+                            attnum))
+            (list-tabulate (get-var-element 'natts var-meta) (lambda (x) x)))
+       var-meta)))
+
+(define (load-attname ncid varid attnum)
+  (let* ((alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
+         (out (c-call "nc_inq_attname" ncid varid attnum alien-name)))
+    (cond ((= 0 out) (newline) (display "loading var sucessful"))
+          ((= -33 out) (error "Not a netcdf id" ncid))
+          ((= -49 out) (error "Bad varid" varid))
+          ((= -116 out) (error "Bad group id" varid))
+          ;; note there are more error codes, im too lazy to do
+          ;; I should have made a univsersal error-check gen func
+          ((alien-null? alien-name)
+           (error "could't load att-name - unspecified reason" varid))
+          (else (error "unspecified response")))
+    (alien->string alien-name)))
 
 (define (get-var-element key var-structure)
   (cdr (assoc key var-structure)))
@@ -228,10 +288,13 @@
       nan
       (let ((value (+ 200.0 (* element 0.01))))
         (if (or (< value 140.0) (> value 375.0))
-            inf-;;(error "value out of expected range")
+            nan;;(error "value out of expected range")
             value))))
 
 ;; (define vec (alien-array->vector alien-var nelements irwin-processor))
 ;; (define vec-list (vector->list vec))
 ;;(close-ncid ncid)
+
+(define (short-peek x) (c-> x "short"))
+(define (short-advance x) (c-array-loc! x "short" 1))
 
