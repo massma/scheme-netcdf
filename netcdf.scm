@@ -2,6 +2,7 @@
 (load-option 'ffi)
 (C-include "netcdf")
 
+;; below should probably go into a file somewhere
 (define (zero)
   (identity-procedure 0.))
 
@@ -60,7 +61,8 @@
                                      (split-list string-list "variables:"
                                                  "// global attributes:"))))
           (apply joiner (split-list string-list "// global attributes:" "}"))
-          filename)))
+          filename
+          (load-ncid filename))))
 
 (define (get-dimensions metadata)
   (let ((dims (car metadata)))
@@ -77,12 +79,12 @@
 (define (get-filepath metadata)
   (cadddr metadata))
 
+(define (get-ncid metadata)
+  (fifth metadata))
 
-;; testing
 
-;;; now we try loading with c lib
-
-;; lifted from x11-base.scm
+;;; C-lib functions
+;; below lifted from x11-base.scm
 (define (->cstring string)
   (cond ((and (integer? string) (zero? string))
 	 0)
@@ -108,12 +110,10 @@
 	(else
 	 (error:wrong-type-argument string "a string or 0" '->cstring))))
 
-;;"/home/adam/scratch/data/isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"
-
 (define (load-ncid filename)
   (let* ((alien-ncid (malloc (* 2 (c-sizeof "int")) 'int))
          (out (C-call "nc_open" (->cstring filename) 0 alien-ncid)))
-    (cond ((= 0 out) (display "loading ncid sucessful"))
+    (cond ((= 0 out) (newline) (display "loading ncid sucessful"))
           ((= -61 out) (error "not enough memory" filename))
           ((= -101 out) (error "Error at HDF5 layer" filename))
           ((= -106 out) (error "Problem with dimension metadata" filename))
@@ -122,29 +122,32 @@
           (else (error "unspecified response")))
     (C-> alien-ncid "int")))
 
-(define (load-varid ncid var-name)
+(define (load-varid metadata var-name)
   (let* ((alien-varid (malloc (* 2 (c-sizeof "int")) 'int))
+         (ncid (get-ncid metadata))
          (out (C-call "nc_inq_varid" ncid (->cstring var-name) alien-varid)))
-    (cond ((= 0 out) (display "loading varid sucessful"))
+    (cond ((= 0 out) (newline) (display "loading varid sucessful"))
           ((= -33 out) (error "Not a netcdf id." ncid))
           ((alien-null? alien-varid)
            (error "could't open file-unspecified reason" ncid))
           (else (error "unspecified response")))
     (C-> alien-varid "int")))
 
-(define (close-ncid ncid)
+(define (close-ncid metadata)
   ;; this is dangerous, introduces state :(
-  (let ((out (C-call "nc_close" ncid)))
-    (cond ((= 0 out) (display "closing sucessful"))
+  (let* ((ncid (get-ncid metadata))
+         (out (C-call "nc_close" ncid)))
+    (cond ((= 0 out) (newline) (display "closing sucessful"))
           ((= -33 out) (error "Not a netcdf id." ncid))
           ((= -116 out) (error "Bad group ID." ncid))
           (else (error "unspecified response")))
     #f))
 
-(define (load-var ncid varid nelements)
-  (let* ((alien-var (malloc (* 2 nelements (c-sizeof "short")) 'short))
+(define (load-var metadata varid nelements)
+  (let* ((ncid (get-ncid metadata))
+         (alien-var (malloc (* 2 nelements (c-sizeof "short")) 'short))
          (out (c-call "nc_get_var_short" ncid varid alien-var)))
-    (cond ((= 0 out) (display "loading var sucessful"))
+    (cond ((= 0 out) (newline) (display "loading var sucessful"))
           ((= -49 out) (error "Variable not found" varid))
           ((= -60 out) (error "Math result not representable" varid))
           ((= -39 out) (error "Operation not allowed in define mode" varid))
@@ -164,15 +167,65 @@
             (C-array-loc! alien "short" 1)
             (loop (1+ n)))))
     vec))
+
 ;; below you need large stack allocation to avoid
 ;; max recursion depth
-(define (alien-array->list alien nelements process)
+(define (alien-array->list alien nelements peek advance)
   (let loop ((n 0))
     (if (< n nelements)
-        (let ((short (C-> alien "short")))
-          (C-array-loc! alien "short" 1)
-          (cons (process short) (loop (1+ n))))
+        (let ((value (peek alien)))
+          (advance alien)
+          (cons value (loop (1+ n))))
         '())))
+
+(define (load-var-meta metadata varid)
+  (let* ((ncid (get-ncid metadata))
+         (alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
+         (alien-xtype (malloc (* 2 (c-sizeof "int")) 'nc_type))
+         (alien-ndims (malloc (* 2 (c-sizeof "int")) 'int))
+         (alien-dimids (malloc (* 10 2 (c-sizeof "int")) 'int))
+         (alien-natts (malloc (* 2 (c-sizeof "int")) 'int))
+         (out (c-call "nc_inq_var" ncid varid alien-name
+                      alien-xtype alien-ndims alien-dimids
+                      alien-natts)))
+    (cond ((= 0 out) (newline) (display "loading var sucessful"))
+          ((= -49 out) (error "Variable not found" varid))
+          ((= -33 out) (error "Not a netcdf id" varid))
+          ((alien-null? alien-ndims)
+           (error "could't load var- unspecified reason" varid))
+          (else (error "unspecified response")))
+    (make-var-structure metadata alien-name alien-xtype alien-ndims
+                        alien-dimids alien-natts)))
+
+(define (make-var-structure metadata alien-name alien-xtype alien-ndims
+                            alien-dimids alien-natts)
+  (let ((ndims (c-> alien-ndims "int") ))
+    `((filename . ,(get-filepath metadata))
+      (ncid . ,(get-ncid metadata))
+      (name . ,(alien->string alien-name))
+      (xtype . ,(alien->type alien-xtype))
+      (ndims . ,ndims)
+      (dimids . ,(alien-array->list alien-dimids ndims
+                                    (lambda (x) (c-> x "int"))
+                                    (lambda (x) (C-array-loc! x "int" 1))))
+      (natts . ,(c-> alien-natts "int")))))
+
+(define (alien->string alien)
+  (let ((new (c-peek-cstring alien)))
+    (if (alien-null? alien)
+        (error "No string in pointer."))
+    (if (string? new)
+        new
+        (utf8->string new))))
+
+(define (alien->type alien)
+  (let ((type (c-> alien "int"))
+        (conv-key '((0 . "not a type") (1 . "byte") (2 . "char")
+                    (3 . "short") (4 . "int") (5 . "float")
+                    (6 . "double") (7 . "ubyte") (8 . "ushort")
+                    (9 . "uint") (10 . "uint64") (11 . "uint64")
+                    (12 . "string"))))
+    (cdr (assoc type conv-key))))
 
 (define (irwin-processor element)
   (if (eqv? element -31999)

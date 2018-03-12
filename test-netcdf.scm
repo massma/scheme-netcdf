@@ -3,57 +3,36 @@
 (cf "netcdf")
 (load "netcdf")
 
-(let* ((ncid (load-ncid (string-append
-                               "/home/adam/scratch/data/"
-                               "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
-       (varid (load-varid ncid "irwin_cdr"))
-       (nelements 10286000)
-       (alien-var (load-var ncid varid 10286000)))
-  (with-timings
-   (lambda () (let ((alien-var (load-var ncid varid 10286000)))
-                (define vec-list
-                  (alien-array->list
-                   alien-var
-                   nelements
-                   irwin-processor))))
-   (lambda (run-time gc-time real-time)
-     (newline) (display "run time: ")
-     (write (internal-time/ticks->seconds run-time))
-     (write-char #\space) (newline) (display "gc time: ")
-     (write (internal-time/ticks->seconds gc-time))
-     (write-char #\space) (newline) (display "wall time: ")
-     (write (internal-time/ticks->seconds real-time))
-     (newline)))
-  (close-ncid ncid))
+(define var-meta
+  (let* ((metadata (make-metadata
+                    (string-append
+                     "/home/adam/scratch/data/"
+                     "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
+         (varid (load-varid metadata "irwin_cdr"))
+         (nelements 10286000)
+         (alien-var (load-var metadata varid 10286000)))
+    ;; ;
+    ;; (with-timings
+    ;;  (lambda () (let ((alien-var (load-var metadata varid 10286000)))
+    ;;               (define vec-list
+    ;;                 (map irwin-processor (alien-array->list
+    ;;                  alien-var
+    ;;                  nelements)))))
+    ;;  (lambda (run-time gc-time real-time)
+    ;;    (newline) (display "run time: ")
+    ;;    (write (internal-time/ticks->seconds run-time))
+    ;;    (write-char #\space) (newline) (display "gc time: ")
+    ;;    (write (internal-time/ticks->seconds gc-time))
+    ;;    (write-char #\space) (newline) (display "wall time: ")
+    ;;    (write (internal-time/ticks->seconds real-time))
+    ;;    (newline)))
+    (define out (load-var-meta metadata varid))
+    (close-ncid metadata)
+    out))
 
-(let* ((ncid (load-ncid (string-append
-                               "/home/adam/scratch/data/"
-                               "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
-       (varid (load-varid ncid "irwin_cdr"))
-       (nelements 10286000)
-       (alien-var (load-var ncid varid 10286000)))
-  (with-timings
-   (lambda () (let ((alien-var (load-var ncid varid 10286000)))
-                (define vec-list
-                  (alien-array->list
-                   alien-var
-                   nelements
-                   irwin-processor))))
-   (lambda (run-time gc-time real-time)
-     (newline) (display "run time: ")
-     (write (internal-time/ticks->seconds run-time))
-     (write-char #\space) (newline) (display "gc time: ")
-     (write (internal-time/ticks->seconds gc-time))
-     (write-char #\space) (newline) (display "wall time: ")
-     (write (internal-time/ticks->seconds real-time))
-     (newline)))
-  (close-ncid ncid))
-
-
-
+(pp var-meta)
 
 ;;(define vec-list (alien-array->list alien-var nelements (lambda (x) x)))
-(close-ncid ncid)
 ;; (define nan-filtered (filter (lambda (x) (not (flo:nan? x)))
 ;;                            vec-list))
 ;; (define inf-filtered (filter flo:finite?

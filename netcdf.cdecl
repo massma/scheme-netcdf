@@ -22,4 +22,13 @@ C declarations for netcdf.scm. |#
         (name (* (const char)))
         (varid (* int)))
 
+(extern int nc_inq_var
+        (ncid int)
+        (varid int)
+        (name (* char))
+        (xtypep (* nc_type))
+        (ndimsp (* int))
+        (dimidsp (* int))
+        (nattsp  (* int))) 	
 
+(typedef nc_type int)
