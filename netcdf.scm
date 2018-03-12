@@ -22,7 +22,7 @@
       (flo:/ -1. (zero)))))
 
 ;;;; This uses ncdump to take a quick look at file contents
-(define (make-metadata filename)
+(define (make-meta filename)
   (let*
       ((string
          (call-with-output-string (lambda (port)
@@ -53,34 +53,22 @@
               (string=? "variables:" line))
           #t
           #f))
-    (list (apply joiner (split-list string-list "dimensions:" "variables:"))
-          (apply joiner (map (lambda (string)
+    `((dimensions
+       . ,(apply joiner (split-list string-list "dimensions:" "variables:")))
+      (variables
+       . ,(apply joiner (map (lambda (string)
                                ;;(string-pad-right string 75)
                                string)
                              (filter var-filter?
                                      (split-list string-list "variables:"
-                                                 "// global attributes:"))))
-          (apply joiner (split-list string-list "// global attributes:" "}"))
-          filename
-          (load-ncid filename))))
+                                                 "// global attributes:")))))
+      (attributes
+       . ,(apply joiner (split-list string-list "// global attributes:" "}")))
+      (filename . ,filename)
+      (ncid . ,(load-ncid filename)))))
 
-(define (get-dimensions metadata)
-  (let ((dims (car metadata)))
-    (display dims)
-    dims))
-(define (get-variables metadata)
-  (let ((vars (cadr metadata)))
-    (display vars)
-    vars))
-(define (get-attributes metadata)
-  (let ((attrs (caddr metadata)))
-    (display attrs)
-    attrs))
-(define (get-filepath metadata)
-  (cadddr metadata))
-
-(define (get-ncid metadata)
-  (fifth metadata))
+(define (get-meta-element key metadata)
+  (cdr (assoc key metadata)))
 
 
 ;;; C-lib functions
@@ -124,7 +112,7 @@
 
 (define (load-varid metadata var-name)
   (let* ((alien-varid (malloc (* 2 (c-sizeof "int")) 'int))
-         (ncid (get-ncid metadata))
+         (ncid (get-meta-element 'ncid metadata))
          (out (C-call "nc_inq_varid" ncid (->cstring var-name) alien-varid)))
     (cond ((= 0 out) (newline) (display "loading varid sucessful"))
           ((= -33 out) (error "Not a netcdf id." ncid))
@@ -135,7 +123,7 @@
 
 (define (close-ncid metadata)
   ;; this is dangerous, introduces state :(
-  (let* ((ncid (get-ncid metadata))
+  (let* ((ncid (get-meta-element 'ncid metadata))
          (out (C-call "nc_close" ncid)))
     (cond ((= 0 out) (newline) (display "closing sucessful"))
           ((= -33 out) (error "Not a netcdf id." ncid))
@@ -144,7 +132,7 @@
     #f))
 
 (define (load-var metadata varid nelements)
-  (let* ((ncid (get-ncid metadata))
+  (let* ((ncid (get-meta-element 'ncid metadata))
          (alien-var (malloc (* 2 nelements (c-sizeof "short")) 'short))
          (out (c-call "nc_get_var_short" ncid varid alien-var)))
     (cond ((= 0 out) (newline) (display "loading var sucessful"))
@@ -171,6 +159,7 @@
 ;; below you need large stack allocation to avoid
 ;; max recursion depth
 (define (alien-array->list alien nelements peek advance)
+  ;; peek, advance are procedures to peek and advance array
   (let loop ((n 0))
     (if (< n nelements)
         (let ((value (peek alien)))
@@ -179,10 +168,11 @@
         '())))
 
 (define (load-var-meta metadata varid)
-  (let* ((ncid (get-ncid metadata))
+  (let* ((ncid (get-meta-element 'ncid metadata))
          (alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
          (alien-xtype (malloc (* 2 (c-sizeof "int")) 'nc_type))
          (alien-ndims (malloc (* 2 (c-sizeof "int")) 'int))
+         ;; below max 10 dims, but should really call to get ndims first
          (alien-dimids (malloc (* 10 2 (c-sizeof "int")) 'int))
          (alien-natts (malloc (* 2 (c-sizeof "int")) 'int))
          (out (c-call "nc_inq_var" ncid varid alien-name
@@ -200,8 +190,8 @@
 (define (make-var-structure metadata alien-name alien-xtype alien-ndims
                             alien-dimids alien-natts)
   (let ((ndims (c-> alien-ndims "int") ))
-    `((filename . ,(get-filepath metadata))
-      (ncid . ,(get-ncid metadata))
+    `((filename . ,(get-meta-element 'filename metadata))
+      (ncid . ,(get-meta-element 'ncid metadata))
       (name . ,(alien->string alien-name))
       (xtype . ,(alien->type alien-xtype))
       (ndims . ,ndims)
@@ -209,6 +199,12 @@
                                     (lambda (x) (c-> x "int"))
                                     (lambda (x) (C-array-loc! x "int" 1))))
       (natts . ,(c-> alien-natts "int")))))
+
+(define (add-var-structure key value var-structure)
+  (cons (pair key value) var-structure))
+
+(define (get-var-element key var-structure)
+  (cdr (assoc key var-structure)))
 
 (define (alien->string alien)
   (let ((new (c-peek-cstring alien)))

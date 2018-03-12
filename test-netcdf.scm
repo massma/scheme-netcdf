@@ -4,7 +4,7 @@
 (load "netcdf")
 
 (define var-meta
-  (let* ((metadata (make-metadata
+  (let* ((metadata (make-meta
                     (string-append
                      "/home/adam/scratch/data/"
                      "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
@@ -12,20 +12,23 @@
          (nelements 10286000)
          (alien-var (load-var metadata varid 10286000)))
     ;; ;
-    ;; (with-timings
-    ;;  (lambda () (let ((alien-var (load-var metadata varid 10286000)))
-    ;;               (define vec-list
-    ;;                 (map irwin-processor (alien-array->list
-    ;;                  alien-var
-    ;;                  nelements)))))
-    ;;  (lambda (run-time gc-time real-time)
-    ;;    (newline) (display "run time: ")
-    ;;    (write (internal-time/ticks->seconds run-time))
-    ;;    (write-char #\space) (newline) (display "gc time: ")
-    ;;    (write (internal-time/ticks->seconds gc-time))
-    ;;    (write-char #\space) (newline) (display "wall time: ")
-    ;;    (write (internal-time/ticks->seconds real-time))
-    ;;    (newline)))
+    (with-timings
+     (lambda () (let ((alien-var (load-var metadata varid 10286000)))
+                  (define vec-list
+                    (map irwin-processor
+                         (alien-array->list
+                          alien-var
+                          nelements
+                          (lambda (x) (c-> x "short"))
+                          (lambda (x) (c-array-loc! x "short" 1)))))))
+     (lambda (run-time gc-time real-time)
+       (newline) (display "run time: ")
+       (write (internal-time/ticks->seconds run-time))
+       (write-char #\space) (newline) (display "gc time: ")
+       (write (internal-time/ticks->seconds gc-time))
+       (write-char #\space) (newline) (display "wall time: ")
+       (write (internal-time/ticks->seconds real-time))
+       (newline)))
     (define out (load-var-meta metadata varid))
     (close-ncid metadata)
     out))
@@ -49,7 +52,7 @@
 ;;   (newline) (display "number obbs=200.0: ") (display (length two00s)))
 
 ;; test metadata
-;; (define meta (make-metadata
+;; (define meta (make-meta
 ;;               (string-append "/home/adam/scratch/data/"
 ;;                              "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
 ;; (display (get-filepath meta))
