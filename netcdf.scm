@@ -2,17 +2,17 @@
 ;;; Copyright 2018 Adam Massmann.
 ;;; ----------------------------------------------------------------------
 ;;; This file is part of scheme-netcdf.
-;;; 
+;;;
 ;;; scheme-netcdf is free software; you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
 ;;; the Free Software Foundation, either version 3 of the License, or
 ;;; (at your option) any later version.
-;;; 
+;;;
 ;;; scheme-netcdf is distributed in the hope that it will be useful,
 ;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;;; GNU General Public License for more details.
-;;; 
+;;;
 ;;; You should have received a copy of the GNU General Public License
 ;;; along with scheme-netcdf.  If not, see <http://www.gnu.org/licenses/>.
 ;;; ----------------------------------------------------------------------
@@ -63,12 +63,16 @@
       ;; takes a list of ncdump's output split on new line
       ;; returns a list spanning startstr to endstr
       (define (make-section section-list)
-        (if (string=? (car section-list) endstr)
+        (if (or  (string=? (car section-list) endstr)
+                 (string=? (car section-list) "}"))
             '()
             (cons (car section-list) (make-section (cdr section-list)))))
       (if (string=? (car newline-list) startstr)
           (make-section newline-list)
-          (split-list (cdr newline-list) startstr endstr)))
+          (if (null? (cdr newline-list))
+              (list startstr "has no values")
+              (split-list (cdr newline-list) startstr endstr))))
+    
     (define (var-filter? line)
       (if (or (substring? "long_name" line)
               (substring? "float" line)
@@ -151,7 +155,7 @@
           ((= -106 out) (error "Problem with dimension metadata" filename))
           ((alien-null? alien-ncid)
            (error "could't open file-unspecified reason" filename))
-          (else (error "unspecified response")))
+          (else (display "WARNING: unspecified response: ") (display out)))
     (C-> alien-ncid "int")))
 
 (define (close-ncid metadata)
@@ -213,7 +217,7 @@
          (out (c-call "nc_inq_var" ncid varid alien-name
                       alien-xtype alien-ndims alien-dimids
                       alien-natts)))
-    (cond ((= 0 out) (newline) (display "loading var sucessful"))
+    (cond ((= 0 out)) ;(newline) (display "loading var sucessful")
           ((= -49 out) (error "Variable not found" varid))
           ((= -33 out) (error "Not a netcdf id" varid))
           ((alien-null? alien-ndims)
@@ -257,7 +261,7 @@
          (alien-var (malloc (* nelements (get-c-sizeof type))
                             (string->symbol type)))
          (out (c-call "nc_get_var" ncid varid alien-var)))
-    (cond ((= 0 out) (newline) (display "loading var sucessful"))
+    (cond ((= 0 out)) ; (newline) (display "loading var sucessful")
           ((= -49 out) (error "Variable not found" varid))
           ((= -60 out) (error "Math result not representable" varid))
           ((= -39 out) (error "Operation not allowed in define mode" varid))
@@ -272,13 +276,13 @@
   (let* ((attrs (get-element 'atts var-meta))
          (fillv (if (assoc "_FillValue" attrs)
                     (get-element "_FillValue" attrs)
-                    (begin (display "WARNING - no fill value") nan)))
+                    (begin (newline) (display "WARNING - no fill value") nan)))
          (offset (if (assoc "add_offset" attrs)
                      (get-element "add_offset" attrs)
-                     0.0))
+                     0))
          (scale (if (assoc "scale_factor" attrs)
                      (get-element "scale_factor" attrs)
-                     1.0))
+                     1))
          (valid_range (if (assoc "valid_range" attrs)
                           (get-element "valid_range" attrs)
                           (list inf- inf+)))
@@ -316,7 +320,7 @@
   (let* ((alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
         (alien-len (malloc (c-sizeof "ulong") '(* size_t)))
         (out (c-call "nc_inq_dim" ncid dimid alien-name alien-len)))
-    (cond ((= 0 out) (newline) (display "loading var sucessful"))
+    (cond ((= 0 out)) ;(newline) (display "loading var sucessful")
           ((= -46 out) (error "Bad dim name" dimid))
           ((= -33 out) (error "Not a netcdf id" ncid))
           ((alien-null? alien-len)
@@ -364,7 +368,7 @@
 (define (load-attname ncid varid attnum)
   (let* ((alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
          (out (c-call "nc_inq_attname" ncid varid attnum alien-name)))
-    (cond ((= 0 out) (newline) (display "loading var sucessful"))
+    (cond ((= 0 out)) ;(newline) (display "loading var sucessful")
           ((= -33 out) (error "Not a netcdf id" ncid))
           ((= -49 out) (error "Bad varid" varid))
           ((= -116 out) (error "Bad group id" varid))
