@@ -22,6 +22,8 @@
     (close-ncid metadata)
     data))
 
+
+
 (pp (get-element 'meta data))
 (list-ref (get-element 'data data) 1949924)
 (pa list-ref)
