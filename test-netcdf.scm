@@ -1,6 +1,7 @@
 (load-option 'ffi)
 (C-include "netcdf")
 (cf "netcdf")
+;; (load "install-netcdf")
 (load "netcdf")
 
 (define var-meta

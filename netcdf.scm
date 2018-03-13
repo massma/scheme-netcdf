@@ -2,7 +2,9 @@
 (load-option 'ffi)
 (C-include "netcdf")
 
+
 ;; below should probably go into a file somewhere
+;; useful definitions
 (define (zero)
   (identity-procedure 0.))
 
@@ -21,7 +23,11 @@
     (lambda ()
       (flo:/ -1. (zero)))))
 
-;;;; This uses ncdump to take a quick look at file contents
+(define (pair key value)
+  `(,key . ,value))
+
+
+;; file-level metadata (using ncdump rather than c ffi)
 (define (make-meta filename)
   (let*
       ((string
@@ -71,7 +77,7 @@
   (cdr (assoc key metadata)))
 
 
-;;; C-lib functions
+;;;; General C-lib functions
 ;; below lifted from x11-base.scm
 (define (->cstring string)
   (cond ((and (integer? string) (zero? string))
@@ -98,6 +104,18 @@
 	(else
 	 (error:wrong-type-argument string "a string or 0" '->cstring))))
 
+(define (alien-array->vector alien nelements process)
+  (let ((vec (make-vector nelements -99999.0)))
+    ;; below using cons maximum recursion depth is exceeded
+    (let loop ((n 0))
+      (if (< n nelements)
+          (let ((short (C-> alien "short")))
+            (vector-set! vec n (process short))
+            (C-array-loc! alien "short" 1)
+            (loop (1+ n)))))
+    vec))
+
+;; file-level c fucntions
 (define (load-ncid filename)
   (let* ((alien-ncid (malloc (c-sizeof "int") 'int))
          (out (C-call "nc_open" (->cstring filename) 0 alien-ncid)))
@@ -110,6 +128,42 @@
           (else (error "unspecified response")))
     (C-> alien-ncid "int")))
 
+(define (close-ncid metadata)
+  ;; this is dangerous, introduces state, :(, run when done w/ file
+  (let* ((ncid (get-meta-element 'ncid metadata))
+         (out (C-call "nc_close" ncid)))
+    (cond ((= 0 out) (newline) (display "closing sucessful"))
+          ((= -33 out) (error "Not a netcdf id." ncid))
+          ((= -116 out) (error "Bad group ID." ncid))
+          (else (error "unspecified response")))
+    #f))
+
+;; below you need large stack allocation to avoid
+;; max recursion depth
+(define (alien->list alien nelements type)
+  (let ((peek (get-peek type))
+        (advance (get-advance type)))
+    (let loop ((n 0))
+      (if (< n nelements)
+          (let ((value (peek alien)))
+            (advance alien)
+            (cons value (loop (1+ n))))
+          '()))))
+
+(define (alien->string alien)
+  (let ((new (c-peek-cstring alien)))
+    (if (alien-null? alien)
+        (error "No string in pointer."))
+    (if (string? new)
+        new
+        (utf8->string new))))
+
+(define (alien->type alien)
+  (let ((type (c-> alien "int")))
+    (cdr (assoc type +type-conv-key+))))
+
+
+;;;; variable-level c functions
 (define (load-varid metadata var-name)
   (let* ((alien-varid (malloc (c-sizeof "int") 'int))
          (ncid (get-meta-element 'ncid metadata))
@@ -121,51 +175,8 @@
           (else (error "unspecified response")))
     (C-> alien-varid "int")))
 
-(define (close-ncid metadata)
-  ;; this is dangerous, introduces state, :(, run when done w/ file
-  (let* ((ncid (get-meta-element 'ncid metadata))
-         (out (C-call "nc_close" ncid)))
-    (cond ((= 0 out) (newline) (display "closing sucessful"))
-          ((= -33 out) (error "Not a netcdf id." ncid))
-          ((= -116 out) (error "Bad group ID." ncid))
-          (else (error "unspecified response")))
-    #f))
-
-(define (load-var metadata varid nelements)
-  (let* ((ncid (get-meta-element 'ncid metadata))
-         (alien-var (malloc (* nelements (c-sizeof "short")) 'short))
-         (out (c-call "nc_get_var_short" ncid varid alien-var)))
-    (cond ((= 0 out) (newline) (display "loading var sucessful"))
-          ((= -49 out) (error "Variable not found" varid))
-          ((= -60 out) (error "Math result not representable" varid))
-          ((= -39 out) (error "Operation not allowed in define mode" varid))
-          ((= -33 out) (error "Not a netcdf id" varid))
-          ((alien-null? alien-ncid)
-           (error "could't load var- unspecified reason" varid))
-          (else (error "unspecified response")))
-    alien-var))
-
-(define (alien-array->vector alien nelements process)
-  (let ((vec (make-vector nelements -99999.0)))
-    ;; below using cons maximum recursion depth is exceeded
-    (let loop ((n 0))
-      (if (< n nelements)
-          (let ((short (C-> alien "short")))
-            (vector-set! vec n (process short))
-            (C-array-loc! alien "short" 1)
-            (loop (1+ n)))))
-    vec))
-
-;; below you need large stack allocation to avoid
-;; max recursion depth
-(define (alien-array->list alien nelements peek advance)
-  ;; peek, advance are procedures to peek and advance array
-  (let loop ((n 0))
-    (if (< n nelements)
-        (let ((value (peek alien)))
-          (advance alien)
-          (cons value (loop (1+ n))))
-        '())))
+;; (define (load-var metadata varid nelements)
+;;   )
 
 (define (load-var-meta metadata varname)
   (let* ((ncid (get-meta-element 'ncid metadata))
@@ -189,7 +200,12 @@
            (make-var-structure metadata varid alien-name alien-xtype alien-ndims
                                alien-dimids alien-natts))
            (var-meta (load-dims var-meta))
-           (var-meta (load-attnames var-meta)))
+           (att-names (load-att-names var-meta))
+           (var-meta (add-var-structure 'att
+                                        (map (lambda (name)
+                                               (load-att var-meta name))
+                                             att-names)
+                                        var-meta)))
       var-meta)))
 
 (define (make-var-structure metadata varid alien-name alien-xtype alien-ndims
@@ -201,13 +217,40 @@
       (varid . ,varid)
       (xtype . ,(alien->type alien-xtype))
       (ndims . ,ndims)
-      (dimids . ,(alien-array->list alien-dimids ndims
-                                    (lambda (x) (c-> x "int"))
-                                    (lambda (x) (c-array-loc! x "int" 1))))
+      (dimids . ,(alien->list alien-dimids ndims "int"))
       (natts . ,(c-> alien-natts "int")))))
 
-(define (pair key value)
-  `(,key . ,value))
+;; (define (build-loader var-meta)
+;;   (let* ((ncid (get-var-element 'ncid var-meta))
+;;          (nelements (apply * (alist->list (get-var-element 'dims var-meta))))
+;;          (type (get-var-element 'xtype var-meta))
+;;          (alien-var (malloc (* nelements (c-sizeof type))
+;;                             (string->symbol type)))
+;;          (out (c-call (string-append "nc_get_var_" type) ncid varid alien-var)))
+;;     (cond ((= 0 out) (newline) (display "loading var sucessful"))
+;;           ((= -49 out) (error "Variable not found" varid))
+;;           ((= -60 out) (error "Math result not representable" varid))
+;;           ((= -39 out) (error "Operation not allowed in define mode" varid))
+;;           ((= -33 out) (error "Not a netcdf id" varid))
+;;           ((alien-null? alien-ncid)
+;;            (error "could't load var- unspecified reason" varid))
+;;           (else (error "unspecified response")))
+;;     alien-var))
+
+;; (define (irwin-processor element)
+;;   (if (eqv? element -31999)
+;;       nan
+;;       (let ((value (+ 200.0 (* element 0.01))))
+;;         (if (or (< value 140.0) (> value 375.0))
+;;             nan;;(error "value out of expected range")
+;;             value))))
+
+;; (define (build-processor var-meta)
+;;   (let ((attrs (get-var-element 'att-names var-meta)))
+;;     (if (assoc "_FillValue" attrs)
+;;         (define fvalue (load-att var-meta "_FillValue")))
+;;     (lambda (value)
+;;       )))
 
 (define (add-var-structure key value var-structure)
   (cons (pair key value) var-structure))
@@ -215,6 +258,10 @@
 (define (key-exists? key structure)
   (assoc key structure))
 
+(define (alist->list structure)
+  (map cdr structure))
+
+;;;; dimension functions
 (define (load-dims var-meta)
   (if (key-exists? 'dims var-meta)
       (error "Called load-dims but dims already exists" var-meta)
@@ -237,17 +284,44 @@
           (else (error "unspecified response")))
     (pair (alien->string alien-name) (c-> alien-len "ulong"))))
 
-(define (load-attnames var-meta)
+;;;; attribute funtions
+(define (load-att-names var-meta)
   (if (key-exists? 'att-names var-meta)
-      (error "Called load-attname but attname already exists" var-meta)
-      (add-var-structure
-       'att-names
-       (map (lambda (attnum)
-              (load-attname (get-var-element 'ncid var-meta)
-                            (get-var-element 'varid var-meta)
-                            attnum))
-            (list-tabulate (get-var-element 'natts var-meta) (lambda (x) x)))
-       var-meta)))
+      (error "Called load-att-names but attname already exists" var-meta)
+      (map (lambda (attnum)
+             (load-attname (get-var-element 'ncid var-meta)
+                           (get-var-element 'varid var-meta)
+                           attnum))
+           (list-tabulate (get-var-element 'natts var-meta) (lambda (x) x)))))
+
+(define (load-att var-meta name)
+  (let* ((ncid (get-var-element 'ncid var-meta))
+         (varid (get-var-element 'varid var-meta))
+         (xtype (malloc (c-sizeof "int") 'nc_type))
+         (len (malloc (c-sizeof "ulong") 'size_t))
+         (out (c-call "nc_inq_att" ncid varid name xtype len)))
+    (if (not (equal? out 0))
+        (error "failed to load attribute metadata code:" out))
+    (let* ((nelements (c-> len "ulong"))
+           (type (alien->type xtype))
+           (loader
+            (lambda ()
+              (let* ((alien-data (malloc (* nelements
+                                           (get-sizeof type))
+                                        (string->symbol type)))
+                     (out (c-call "nc_get_att" ncid
+                                 varid name alien-data)))
+                (if (not (equal? out 0))
+                    (error "failed to load attribute, code: " out)
+                    (if (equal? type "char")
+                        (utf8->string
+                         (list->bytevector
+                          (alien->list alien-data nelements type)))
+                        (alien->list alien-data nelements type)))))))
+      ;; (loader)
+      (pair name ;(list name type nelements)
+            (loader))
+      )))
 
 (define (load-attname ncid varid attnum)
   (let* ((alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
@@ -264,37 +338,81 @@
     (alien->string alien-name)))
 
 (define (get-var-element key var-structure)
-  (cdr (assoc key var-structure)))
+  (let ((value (assoc key var-structure)))
+    (if value
+        (cdr value)
+        (error "key not in structure" (list key (map car var-structure))))))
 
-(define (alien->string alien)
-  (let ((new (c-peek-cstring alien)))
-    (if (alien-null? alien)
-        (error "No string in pointer."))
-    (if (string? new)
-        new
-        (utf8->string new))))
 
-(define (alien->type alien)
-  (let ((type (c-> alien "int"))
-        (conv-key '((0 . "not a type") (1 . "byte") (2 . "char")
-                    (3 . "short") (4 . "int") (5 . "float")
-                    (6 . "double") (7 . "ubyte") (8 . "ushort")
-                    (9 . "uint") (10 . "uint64") (11 . "uint64")
-                    (12 . "string"))))
-    (cdr (assoc type conv-key))))
+;;;; misc. temp. functions
 
-(define (irwin-processor element)
-  (if (eqv? element -31999)
-      nan
-      (let ((value (+ 200.0 (* element 0.01))))
-        (if (or (< value 140.0) (> value 375.0))
-            nan;;(error "value out of expected range")
-            value))))
 
-;; (define vec (alien-array->vector alien-var nelements irwin-processor))
-;; (define vec-list (vector->list vec))
-;;(close-ncid ncid)
 
-(define (short-peek x) (c-> x "short"))
-(define (short-advance x) (c-array-loc! x "short" 1))
+(define +type-conv-key+ '((0 . "not a type") (1 . "byte") (2 . "char")
+                        (3 . "short") (4 . "int") (5 . "float")
+                        (6 . "double") (7 . "ubyte") (8 . "ushort")
+                        (9 . "uint") (10 . "uint64") (11 . "uint64")
+                        (12 . "string")))
+
+
+;; (define +supported-types+ '("char" "uchar" "short" "ushort"
+;;                             "int" "uint" "long" "ulong" "float" "double"))
+
+;; doesn't let us pass string values, not sure why
+;; (define (gen-peek name)
+;;   (pair name (lambda (x)
+;;                (c-> x "int"))))
+;; (define (gen-advance name)
+;;   (pair name (lambda (x)
+;;                (c-array-loc! x "int" 1))))
+
+;; (define +peek-list+ (map gen-peek +supported-types+))
+;; (define +advance-list+ (map gen-advance +supported-types+))
+
+(define (get-peek type)
+  (cdr (assoc type +peek-list+)))
+
+(define (get-advance type)
+  (cdr (assoc type +advance-list+)))
+
+(define (get-sizeof type)
+  (cdr (assoc type +size-list+)))
+
+(define +peek-list+ `(("char" . ,(lambda (x) (c-> x "char")))
+                      ("uchar" . ,(lambda (x) (c-> x "uchar")))
+                      ("short" . ,(lambda (x) (c-> x "short")))
+                      ("ushort" . ,(lambda (x) (c-> x "ushort")))
+                      ("int" . ,(lambda (x) (c-> x "int")))
+                      ("uint" . ,(lambda (x) (c-> x "uint")))
+                      ("long" . ,(lambda (x) (c-> x "long")))
+                      ("ulong" . ,(lambda (x) (c-> x "ulong")))
+                      ("float" . ,(lambda (x) (c-> x "float")))
+                      ("double" . ,(lambda (x) (c-> x "double")))))
+
+(define +advance-list+ `(("char" . ,(lambda (x) (c-array-loc! x "char" 1)))
+                         ("uchar" . ,(lambda (x) (c-array-loc! x "uchar" 1)))
+                         ("short" . ,(lambda (x) (c-array-loc! x "short" 1)))
+                         ("ushort" . ,(lambda (x) (c-array-loc! x "ushort" 1)))
+                         ("int" . ,(lambda (x) (c-array-loc! x "int" 1)))
+                         ("uint" . ,(lambda (x) (c-array-loc! x "uint" 1)))
+                         ("long" . ,(lambda (x) (c-array-loc! x "long" 1)))
+                         ("ulong" . ,(lambda (x) (c-array-loc! x "ulong" 1)))
+                         ("float" . ,(lambda (x) (c-array-loc! x "float" 1)))
+                         ("double" .
+                          ,(lambda (x) (c-array-loc! x "double" 1)))))
+
+(define +size-list+ `(("char" . ,(c-sizeof "char"))
+                      ("uchar" . ,(c-sizeof "uchar"))
+                      ("short" . ,(c-sizeof "short"))
+                      ("ushort" . ,(c-sizeof "ushort"))
+                      ("int" . ,(c-sizeof "int"))
+                      ("uint" . ,(c-sizeof "uint"))
+                      ("long" . ,(c-sizeof "long"))
+                      ("ulong" . ,(c-sizeof "ulong"))
+                      ("float" . ,(c-sizeof "float"))
+                      ("double" . ,(c-sizeof "double"))))
+
+
+#f
+
 

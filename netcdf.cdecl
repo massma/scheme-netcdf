@@ -12,10 +12,10 @@ C declarations for netcdf.scm. |#
 (extern int nc_close
         (ncid int))
 
-(extern int nc_get_var_short
+(extern int nc_get_var
         (ncid int)
         (varid int)
-        (ip (* short)))
+        (ip (* void)))
 
 (extern int nc_inq_varid
         (ncid int)
@@ -29,7 +29,7 @@ C declarations for netcdf.scm. |#
         (xtypep (* nc_type))
         (ndimsp (* int))
         (dimidsp (* int))
-        (nattsp  (* int))) 	
+        (nattsp  (* int)))
 
 (typedef nc_type int)
 
@@ -56,3 +56,8 @@ C declarations for netcdf.scm. |#
         (attnum int)
         (name (* char)))
 
+(extern int nc_get_att
+        (ncid int)
+        (varid int)
+        (name (* (const char)))
+        (value (* void)))

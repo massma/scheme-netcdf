@@ -29,7 +29,7 @@ USA.
 
 (load-option 'synchronous-subprocess)
 (with-working-directory-pathname
- (directory-pathname (pwd)) ;(current-load-pathname) - if loading file
+ (directory-pathname (current-load-pathname)) ; (pwd) - if from repl
  (lambda ()
    (let ((port (notification-output-port)))
      (fresh-line port)
