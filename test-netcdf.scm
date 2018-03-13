@@ -4,39 +4,27 @@
 ;; (load "install-netcdf")
 (load "netcdf")
 
-(define var-meta
+(define data
   (let* ((metadata (make-meta
                     (string-append
                      "/home/adam/scratch/data/"
-                     "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
-         (var-meta (load-var-meta metadata "irwin_cdr"))
-         (nelements 10286000)
-         ;;(alien-var (load-var var-metadata))
-         )
-    ;; ;
-    ;; (with-timings
-    ;;  (lambda () (let ((alien-var (load-var metadata varid 10286000)))
-    ;;               (define vec-list
-    ;;                 (map irwin-processor
-    ;;                      (alien-array->list
-    ;;                       alien-var
-    ;;                       nelements
-    ;;                       short-peek
-    ;;                       short-advance)))))
-    ;;  (lambda (run-time gc-time real-time)
-    ;;    (newline) (display "run time: ")
-    ;;    (write (internal-time/ticks->seconds run-time))
-    ;;    (write-char #\space) (newline) (display "gc time: ")
-    ;;    (write (internal-time/ticks->seconds gc-time))
-    ;;    (write-char #\space) (newline) (display "wall time: ")
-    ;;    (write (internal-time/ticks->seconds real-time))
-    ;;    (newline)))
-    (define out var-meta)
+                     "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))))
+    (define data (with-timings
+                  (lambda () (make-var-data metadata "irwin_cdr"))
+                  (lambda (run-time gc-time real-time)
+                    (newline) (display "run time: ")
+                    (write (internal-time/ticks->seconds run-time))
+                    (write-char #\space) (newline) (display "gc time: ")
+                    (write (internal-time/ticks->seconds gc-time))
+                    (write-char #\space) (newline) (display "wall time: ")
+                    (write (internal-time/ticks->seconds real-time))
+                    (newline))))
     (close-ncid metadata)
-    out))
+    data))
 
-(pp var-meta)
-
+(pp (get-element 'meta data))
+(list-ref (get-element 'data data) 1949924)
+(pa list-ref)
 ;;(define vec-list (alien-array->list alien-var nelements (lambda (x) x)))
 ;; (define nan-filtered (filter (lambda (x) (not (flo:nan? x)))
 ;;                            vec-list))

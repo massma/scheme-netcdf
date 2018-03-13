@@ -60,22 +60,28 @@
           #t
           #f))
     `((dimensions
-       . ,(apply joiner (split-list string-list "dimensions:" "variables:")))
+       . (,(apply joiner (split-list string-list "dimensions:" "variables:"))))
       (variables
-       . ,(apply joiner (map (lambda (string)
-                               ;;(string-pad-right string 75)
-                               string)
-                             (filter var-filter?
-                                     (split-list string-list "variables:"
-                                                 "// global attributes:")))))
+       . (,(apply joiner (map (lambda (string)
+                                ;;(string-pad-right string 75)
+                                string)
+                              (filter var-filter?
+                                      (split-list string-list "variables:"
+                                                  "// global attributes:"))))))
       (attributes
-       . ,(apply joiner (split-list string-list "// global attributes:" "}")))
-      (filename . ,filename)
-      (ncid . ,(load-ncid filename)))))
+       . (,(apply joiner (split-list string-list "// global attributes:" "}"))))
+      (filename . (,filename))
+      (ncid . (,(load-ncid filename))))))
 
-(define (get-meta-element key metadata)
-  (cdr (assoc key metadata)))
 
+(define (get-element key structure)
+  (let ((value (assoc key structure)))
+    (if value
+        (let ((output (cdr value)))
+          (if (equal? (length output) 1)
+              (car output)
+              output))
+        (error "key not in structure" (list key (map car structure))))))
 
 ;;;; General C-lib functions
 ;; below lifted from x11-base.scm
@@ -130,7 +136,7 @@
 
 (define (close-ncid metadata)
   ;; this is dangerous, introduces state, :(, run when done w/ file
-  (let* ((ncid (get-meta-element 'ncid metadata))
+  (let* ((ncid (get-element 'ncid metadata))
          (out (C-call "nc_close" ncid)))
     (cond ((= 0 out) (newline) (display "closing sucessful"))
           ((= -33 out) (error "Not a netcdf id." ncid))
@@ -166,7 +172,7 @@
 ;;;; variable-level c functions
 (define (load-varid metadata var-name)
   (let* ((alien-varid (malloc (c-sizeof "int") 'int))
-         (ncid (get-meta-element 'ncid metadata))
+         (ncid (get-element 'ncid metadata))
          (out (C-call "nc_inq_varid" ncid (->cstring var-name) alien-varid)))
     (cond ((= 0 out) (newline) (display "loading varid sucessful"))
           ((= -33 out) (error "Not a netcdf id." ncid))
@@ -179,7 +185,7 @@
 ;;   )
 
 (define (load-var-meta metadata varname)
-  (let* ((ncid (get-meta-element 'ncid metadata))
+  (let* ((ncid (get-element 'ncid metadata))
          (varid (load-varid metadata varname))
          (alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
          (alien-xtype (malloc (c-sizeof "int") 'nc_type))
@@ -201,7 +207,7 @@
                                alien-dimids alien-natts))
            (var-meta (load-dims var-meta))
            (att-names (load-att-names var-meta))
-           (var-meta (add-var-structure 'att
+           (var-meta (add-var-structure 'atts
                                         (map (lambda (name)
                                                (load-att var-meta name))
                                              att-names)
@@ -211,46 +217,63 @@
 (define (make-var-structure metadata varid alien-name alien-xtype alien-ndims
                             alien-dimids alien-natts)
   (let ((ndims (c-> alien-ndims "int") ))
-    `((filename . ,(get-meta-element 'filename metadata))
-      (ncid . ,(get-meta-element 'ncid metadata))
-      (name . ,(alien->string alien-name))
-      (varid . ,varid)
-      (xtype . ,(alien->type alien-xtype))
-      (ndims . ,ndims)
+    `((filename . (,(get-element 'filename metadata)))
+      (ncid . (,(get-element 'ncid metadata)))
+      (name . (,(alien->string alien-name)))
+      (varid . (,varid))
+      (xtype . (,(alien->type alien-xtype)))
+      (ndims . (,ndims))
       (dimids . ,(alien->list alien-dimids ndims "int"))
-      (natts . ,(c-> alien-natts "int")))))
+      (natts . (,(c-> alien-natts "int"))))))
 
-;; (define (build-loader var-meta)
-;;   (let* ((ncid (get-var-element 'ncid var-meta))
-;;          (nelements (apply * (alist->list (get-var-element 'dims var-meta))))
-;;          (type (get-var-element 'xtype var-meta))
-;;          (alien-var (malloc (* nelements (c-sizeof type))
-;;                             (string->symbol type)))
-;;          (out (c-call (string-append "nc_get_var_" type) ncid varid alien-var)))
-;;     (cond ((= 0 out) (newline) (display "loading var sucessful"))
-;;           ((= -49 out) (error "Variable not found" varid))
-;;           ((= -60 out) (error "Math result not representable" varid))
-;;           ((= -39 out) (error "Operation not allowed in define mode" varid))
-;;           ((= -33 out) (error "Not a netcdf id" varid))
-;;           ((alien-null? alien-ncid)
-;;            (error "could't load var- unspecified reason" varid))
-;;           (else (error "unspecified response")))
-;;     alien-var))
+(define (make-var-data meta name)
+  (let* ((var-meta (load-var-meta meta name))
+         (var-data (load-var-data var-meta)))
+    (list (pair 'data var-data)
+          (pair 'meta var-meta))))
 
-;; (define (irwin-processor element)
-;;   (if (eqv? element -31999)
-;;       nan
-;;       (let ((value (+ 200.0 (* element 0.01))))
-;;         (if (or (< value 140.0) (> value 375.0))
-;;             nan;;(error "value out of expected range")
-;;             value))))
+(define (load-var-data var-meta)
+  (let* ((ncid (get-element 'ncid var-meta))
+         (varid (get-element 'varid var-meta))
+         (nelements (apply * (alist->list (get-element 'dims var-meta))))
+         (type (get-element 'xtype var-meta))
+         (alien-var (malloc (* nelements (get-c-sizeof type))
+                            (string->symbol type)))
+         (out (c-call "nc_get_var" ncid varid alien-var)))
+    (cond ((= 0 out) (newline) (display "loading var sucessful"))
+          ((= -49 out) (error "Variable not found" varid))
+          ((= -60 out) (error "Math result not representable" varid))
+          ((= -39 out) (error "Operation not allowed in define mode" varid))
+          ((= -33 out) (error "Not a netcdf id" varid))
+          ((alien-null? alien-ncid)
+           (error "could't load var- unspecified reason" varid))
+          (else (error "unspecified response")))
+    (map (build-processor var-meta)
+         (alien->list alien-var nelements type))))
 
-;; (define (build-processor var-meta)
-;;   (let ((attrs (get-var-element 'att-names var-meta)))
-;;     (if (assoc "_FillValue" attrs)
-;;         (define fvalue (load-att var-meta "_FillValue")))
-;;     (lambda (value)
-;;       )))
+(define (build-processor var-meta)
+  (let* ((attrs (get-element 'atts var-meta))
+         (fillv (if (assoc "_FillValue" attrs)
+                    (get-element "_FillValue" attrs)
+                    (begin (display "WARNING - no fill value") nan)))
+         (offset (if (assoc "add_offset" attrs)
+                     (get-element "add_offset" attrs)
+                     0.0))
+         (scale (if (assoc "scale_factor" attrs)
+                     (get-element "scale_factor" attrs)
+                     1.0))
+         (valid_range (if (assoc "valid_range" attrs)
+                          (get-element "valid_range" attrs)
+                          (list inf- inf+)))
+         (min (car valid_range))
+         (max (cadr valid_range)))
+    (lambda (element)
+      (if (eqv? element fillv)
+          nan
+          (let ((value (+ offset (* element scale))))
+            (if (or (< value min) (> value max))
+                nan ;;(error "value out of expected range")
+                value))))))
 
 (define (add-var-structure key value var-structure)
   (cons (pair key value) var-structure))
@@ -268,8 +291,8 @@
       (add-var-structure
        'dims
        (map (lambda (dimid)
-              (load-dim (get-var-element 'ncid var-meta) dimid))
-            (get-var-element 'dimids var-meta))
+              (load-dim (get-element 'ncid var-meta) dimid))
+            (get-element 'dimids var-meta))
        var-meta)))
 
 (define (load-dim ncid dimid)
@@ -286,17 +309,15 @@
 
 ;;;; attribute funtions
 (define (load-att-names var-meta)
-  (if (key-exists? 'att-names var-meta)
-      (error "Called load-att-names but attname already exists" var-meta)
-      (map (lambda (attnum)
-             (load-attname (get-var-element 'ncid var-meta)
-                           (get-var-element 'varid var-meta)
-                           attnum))
-           (list-tabulate (get-var-element 'natts var-meta) (lambda (x) x)))))
+  (map (lambda (attnum)
+         (load-attname (get-element 'ncid var-meta)
+                       (get-element 'varid var-meta)
+                       attnum))
+       (list-tabulate (get-element 'natts var-meta) (lambda (x) x))))
 
 (define (load-att var-meta name)
-  (let* ((ncid (get-var-element 'ncid var-meta))
-         (varid (get-var-element 'varid var-meta))
+  (let* ((ncid (get-element 'ncid var-meta))
+         (varid (get-element 'varid var-meta))
          (xtype (malloc (c-sizeof "int") 'nc_type))
          (len (malloc (c-sizeof "ulong") 'size_t))
          (out (c-call "nc_inq_att" ncid varid name xtype len)))
@@ -307,7 +328,7 @@
            (loader
             (lambda ()
               (let* ((alien-data (malloc (* nelements
-                                           (get-sizeof type))
+                                           (get-c-sizeof type))
                                         (string->symbol type)))
                      (out (c-call "nc_get_att" ncid
                                  varid name alien-data)))
@@ -337,11 +358,7 @@
           (else (error "unspecified response")))
     (alien->string alien-name)))
 
-(define (get-var-element key var-structure)
-  (let ((value (assoc key var-structure)))
-    (if value
-        (cdr value)
-        (error "key not in structure" (list key (map car var-structure))))))
+
 
 
 ;;;; misc. temp. functions
@@ -375,7 +392,7 @@
 (define (get-advance type)
   (cdr (assoc type +advance-list+)))
 
-(define (get-sizeof type)
+(define (get-c-sizeof type)
   (cdr (assoc type +size-list+)))
 
 (define +peek-list+ `(("char" . ,(lambda (x) (c-> x "char")))
@@ -414,5 +431,6 @@
 
 
 #f
+
 
 
