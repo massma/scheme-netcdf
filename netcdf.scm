@@ -548,7 +548,36 @@
                                       (cdr orig-dims)))))))))
     (add-element 'data (tag-data dim-values data) labelled-var)))
 
-(define lab-data (list-data->labeled-data d-out))
+;;(define lab-data (list-data->labeled-data d-out))
+
+(define (find-nearest val lis)
+  ;; assumes list numeric and sorted small to large,
+  ;; finds closest value in lis to val
+  (if (< val (car lis))
+      (error "val smaller than range of list"
+             (list val (car lis))))
+  (let loop ((li lis))
+    (cond ((null? (cdr li)) (error "val larger than range of list"
+                                   (list val (car li))))
+          ((< val (cadr li)) (if (< (abs (- val (car li)))
+                                    (abs (- val (cadr li))))
+                                 (car li)
+                                 (cadr li)))
+          (else (loop (cdr li))))))
+
+(define (index-data coords lab-data)
+  ;; return data element closes to the given coords
+  ;; from the labelled data structure
+  (let ((data (get-element 'data lab-data))
+        (dimensions (let ((dimensions (get-element 'dimensions lab-data)))
+                      (map (lambda (key)
+                             (get-element key dimensions))
+                           (get-keys (get-element 'tagged-dims lab-data))))))
+    (if (= (length dimensions) (length coords))
+        (assoc (map find-nearest coords dimensions) data)
+        (error "supplied dimension of coords do not match dim. of data"
+               (list coords (length dimensions))))))
+
 
 
 ;; ;;
