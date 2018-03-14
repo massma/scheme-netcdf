@@ -45,7 +45,10 @@
 
 (define (pair key value)
   `(,key . ,value))
-
+(define (pair-list key value)
+  (if (not (list? value))
+      `(,key . (,value))
+      `(,key . (,value))))
 
 ;; file-level metadata (using ncdump rather than c ffi)
 (define (make-meta filename)
@@ -105,6 +108,14 @@
           (if (equal? (length output) 1)
               (car output)
               output))
+        (error "key not in structure" (list key (map car structure))))))
+
+(define (get-element-list key structure)
+  ;; differs from above in that gaurantees to send a list
+  ;; e.g. if you need it for map
+  (let ((value (assoc key structure)))
+    (if value
+        (cdr value)
         (error "key not in structure" (list key (map car structure))))))
 
 ;;;; General C-lib functions
@@ -228,7 +239,7 @@
                                alien-dimids alien-natts))
            (var-meta (load-dims var-meta))
            (att-names (load-att-names var-meta))
-           (var-meta (add-var-structure 'atts
+           (var-meta (add-element 'atts
                                         (map (lambda (name)
                                                (load-att var-meta name))
                                              att-names)
@@ -253,10 +264,12 @@
     (list (pair 'data var-data)
           (pair 'meta var-meta))))
 
+
+
 (define (load-var-data var-meta)
   (let* ((ncid (get-element 'ncid var-meta))
          (varid (get-element 'varid var-meta))
-         (nelements (apply * (alist->list (get-element 'dims var-meta))))
+         (nelements (apply * (alist->list (get-element-list 'dims var-meta))))
          (type (get-element 'xtype var-meta))
          (alien-var (malloc (* nelements (get-c-sizeof type))
                             (string->symbol type)))
@@ -296,8 +309,8 @@
                 nan ;;(error "value out of expected range")
                 value))))))
 
-(define (add-var-structure key value var-structure)
-  (cons (pair key value) var-structure))
+(define (add-element key value structure)
+  (cons (pair key value) structure))
 
 (define (key-exists? key structure)
   (assoc key structure))
@@ -305,15 +318,18 @@
 (define (alist->list structure)
   (map cdr structure))
 
+(define (get-keys structure)
+  (map car structure))
+
 ;;;; dimension functions
 (define (load-dims var-meta)
   (if (key-exists? 'dims var-meta)
       (error "Called load-dims but dims already exists" var-meta)
-      (add-var-structure
+      (add-element
        'dims
        (map (lambda (dimid)
               (load-dim (get-element 'ncid var-meta) dimid))
-            (get-element 'dimids var-meta))
+            (get-element-list 'dimids var-meta))
        var-meta)))
 
 (define (load-dim ncid dimid)
@@ -448,3 +464,52 @@
 
 
 
+;;;; conversion scripts
+(define (var-exists? ncid var-name)
+  (let* ((alien-varid (malloc (c-sizeof "int") 'int))
+         (out (C-call "nc_inq_varid" ncid (->cstring var-name) alien-varid)))
+    (cond ((= -33 out) (error "Bad netcdf id on test-var" ncid))
+          ((= 0 out) #t)
+          (else #f))))
+
+(define (add-dims variable)
+  (let* ((meta (get-element 'meta variable))
+         (ncid (get-element 'ncid meta))
+         (dims (get-element 'dims meta))
+         (keys (get-keys dims))
+         (vals (alist->list dims))
+         (loaded-dims
+          (if (and (map (lambda (key)
+                                (var-exists? ncid key))
+                              keys))
+              (map (lambda (key)
+                     (let ((variable (make-var-data meta key)))
+                       (pair-list key (get-element 'data variable))))
+                   keys)
+              (begin (newline) (display "No dimesion data for ")
+                     (display (get-element 'name meta))
+                     (display ", adding int index")
+                     (map (lambda (key val)
+                            (pair-list key (list-tabulate val (lambda (x) x))))
+                          keys vals)))))
+    (add-element 'dimensions loaded-dims variable)))
+
+(define d-out (add-dims data))
+
+;; ;;
+;; (define data
+;;   (let* ((metadata (make-meta
+;;                     (string-append
+;;                      "/home/adam/scratch/data/"
+;;                      "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))))
+;;     (define data (with-timings
+;;                   (lambda () (make-var-data metadata "irwin_cdr"))
+;;                   (lambda (run-time gc-time real-time)
+;;                     (newline) (display "run time: ")
+;;                     (write (internal-time/ticks->seconds run-time))
+;;                     (write-char #\space) (newline) (display "gc time: ")
+;;                     (write (internal-time/ticks->seconds gc-time))
+;;                     (write-char #\space) (newline) (display "wall time: ")
+;;                     (write (internal-time/ticks->seconds real-time))
+;;                     (newline))))
+;;     (add-dims data)))
