@@ -43,12 +43,13 @@
     (lambda ()
       (flo:/ -1. (zero)))))
 
+;; (define (pair key value)
+;;   `(,key . ,value))
 (define (pair key value)
-  `(,key . ,value))
-(define (pair-list key value)
   (if (not (list? value))
       `(,key . (,value))
       `(,key . ,value)))
+
 
 ;; file-level metadata (using ncdump rather than c ffi)
 (define (make-meta filename)
@@ -316,7 +317,7 @@
   (assoc key structure))
 
 (define (alist->list structure)
-  (map cdr structure))
+  (map (lambda (x) (car (cdr x))) structure))
 
 (define (get-keys structure)
   (map car structure))
@@ -484,13 +485,13 @@
                               keys))
               (map (lambda (key)
                      (let ((variable (make-var-data meta key)))
-                       (pair-list key (get-element 'data variable))))
+                       (pair key (get-element 'data variable))))
                    keys)
               (begin (newline) (display "No dimesion data for ")
                      (display (get-element 'name meta))
                      (display ", adding int index")
                      (map (lambda (key val)
-                            (pair-list key (list-tabulate val (lambda (x) x))))
+                            (pair key (list-tabulate val (lambda (x) x))))
                           keys vals)))))
     (add-element 'dimensions loaded-dims variable)))
 
