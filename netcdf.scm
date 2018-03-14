@@ -109,7 +109,7 @@
           (if (equal? (length output) 1)
               (car output)
               output))
-        (error "key not in structure" (list key (map car structure))))))
+        (error "key not in structure" (list key (map get-key structure))))))
 
 (define (get-element-list key structure)
   ;; differs from above in that gaurantees to send a list
@@ -117,7 +117,7 @@
   (let ((value (assoc key structure)))
     (if value
         (cdr value)
-        (error "key not in structure" (list key (map car structure))))))
+        (error "key not in structure" (list key (map get-key structure))))))
 
 ;;;; General C-lib functions
 ;; below lifted from x11-base.scm
@@ -317,10 +317,10 @@
   (assoc key structure))
 
 (define (alist->list structure)
-  (map (lambda (x) (car (cdr x))) structure))
+  (map (lambda (x) (car (get-value x))) structure))
 
 (define (get-keys structure)
-  (map car structure))
+  (map get-key structure))
 
 ;;;; dimension functions
 (define (load-dims var-meta)
@@ -461,7 +461,7 @@
                       ("double" . ,(c-sizeof "double"))))
 
 
-#f
+
 
 
 
@@ -494,6 +494,62 @@
                             (pair key (list-tabulate val (lambda (x) x))))
                           keys vals)))))
     (add-element 'dimensions loaded-dims variable)))
+
+#f
+(define (get-key a-element)
+  (car a-element))
+(define (get-value a-element)
+  (cdr a-element))
+
+(define (list-data->labeled-data variable)
+  ;; takes in raw list of data and makes an alist with each key the coordinates
+  (let* ((variable (if (not (assoc 'dimensions variable))
+                      (add-dims variable)
+                      variable))
+         (dimensions (filter (lambda (x)
+                               (if (> (length (get-value x)) 1) #t #f))
+                             (get-element 'dimensions variable)))
+         (dim-values (map get-value dimensions))
+         (data (get-element 'data variable))
+         (labelled-var (del-assoc 'data variable))
+         ;; document actual tagged dims and their order and length
+         (labelled-var (add-element 'tagged-dims (map (lambda (x)
+                              (pair (get-key x) (length (get-value x))))
+                            dimensions)
+                                    labelled-var)))
+    (define (tag-data dim-val dat)
+      ;; note we still have access to dimvalues
+      (let loop ((dim-val dim-val)
+                 (dat dat))
+        (if (null? dat)
+            (if (null? (last dim-val))
+                '()
+                (error "dat reached null before dims - check index"
+                       (list dim-val)))
+            (cons (pair (map car dim-val) (car dat))
+                  (loop (null-check-and-advance dim-val)
+                        (cdr dat))))))
+    (define (null-check-and-advance dim-val)
+      ;; advance first dim location
+      (let ((advanced-dim (cons (cdr (car dim-val)) (cdr dim-val))))
+        (let loop ((new-dims advanced-dim)
+                   (orig-dims dim-values))
+          (if (null? (cdr new-dims))
+              new-dims ;'()
+              (let ((first (car new-dims))
+                    (second (cadr new-dims)))
+                (if (null? first)
+                    ;; reset first and advance second
+                    (cons (car orig-dims)
+                          (loop (cons (cdr second) (cddr new-dims))
+                                (cdr orig-dims)))
+                    ;; else, advance loop
+                    (cons first (loop (cdr new-dims)
+                                      (cdr orig-dims)))))))))
+    (add-element 'data (tag-data dim-values data) labelled-var)))
+
+(define lab-data (list-data->labeled-data d-out))
+
 
 ;; ;;
 ;; (define data
