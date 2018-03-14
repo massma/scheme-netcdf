@@ -495,7 +495,6 @@
                           keys vals)))))
     (add-element 'dimensions loaded-dims variable)))
 
-#f
 (define (get-key a-element)
   (car a-element))
 (define (get-value a-element)
@@ -548,8 +547,6 @@
                                       (cdr orig-dims)))))))))
     (add-element 'data (tag-data dim-values data) labelled-var)))
 
-;;(define lab-data (list-data->labeled-data d-out))
-
 (define (find-nearest val lis)
   ;; assumes list numeric and sorted small to large,
   ;; finds closest value in lis to val
@@ -579,21 +576,7 @@
                (list coords (length dimensions))))))
 
 
+#f
 
-;; ;;
-;; (define data
-;;   (let* ((metadata (make-meta
-;;                     (string-append
-;;                      "/home/adam/scratch/data/"
-;;                      "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))))
-;;     (define data (with-timings
-;;                   (lambda () (make-var-data metadata "irwin_cdr"))
-;;                   (lambda (run-time gc-time real-time)
-;;                     (newline) (display "run time: ")
-;;                     (write (internal-time/ticks->seconds run-time))
-;;                     (write-char #\space) (newline) (display "gc time: ")
-;;                     (write (internal-time/ticks->seconds gc-time))
-;;                     (write-char #\space) (newline) (display "wall time: ")
-;;                     (write (internal-time/ticks->seconds real-time))
-;;                     (newline))))
-;;     (add-dims data)))
+
+
