@@ -545,7 +545,9 @@
                     ;; else, advance loop
                     (cons first (loop (cdr new-dims)
                                       (cdr orig-dims)))))))))
-    (add-element 'data (tag-data dim-values data) labelled-var)))
+    (add-element 'data
+                 (alist->hash-table (tag-data dim-values data))
+                 labelled-var)))
 
 (define (find-nearest val lis)
   ;; assumes list numeric and sorted small to large,
@@ -571,10 +573,10 @@
                              (get-element key dimensions))
                            (get-keys (get-element 'tagged-dims lab-data))))))
     (if (= (length dimensions) (length coords))
-        (assoc (map find-nearest coords dimensions) data)
+        `(,coords . ,(hash-table/get
+                      data (map find-nearest coords dimensions) #f))
         (error "supplied dimension of coords do not match dim. of data"
                (list coords (length dimensions))))))
-
 
 #f
 
