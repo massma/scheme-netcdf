@@ -48,7 +48,7 @@
 (define (pair-list key value)
   (if (not (list? value))
       `(,key . (,value))
-      `(,key . (,value))))
+      `(,key . ,value)))
 
 ;; file-level metadata (using ncdump rather than c ffi)
 (define (make-meta filename)
@@ -493,8 +493,6 @@
                             (pair-list key (list-tabulate val (lambda (x) x))))
                           keys vals)))))
     (add-element 'dimensions loaded-dims variable)))
-
-(define d-out (add-dims data))
 
 ;; ;;
 ;; (define data
