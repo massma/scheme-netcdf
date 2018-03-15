@@ -17,12 +17,10 @@
 ;;; along with scheme-netcdf.  If not, see <http://www.gnu.org/licenses/>.
 ;;; ----------------------------------------------------------------------
 
-
 (declare (usual-integrations))
 (load-option 'ffi)
 (load-option 'wt-tree)
 (C-include "netcdf")
-
 
 ;; below should probably go into a file somewhere
 ;; useful definitions
@@ -264,9 +262,33 @@
   (let* ((var-meta (load-var-meta meta name))
          (var-data (load-var-data var-meta)))
     (list (pair 'data var-data)
-          (pair 'meta var-meta))))
+          (pair 'meta var-meta)
+          (pair 'type 'raw))))
 
+(define (raw? variable);check
+  (if (equal? 'raw (get-element 'type variable)) #t #f))
+(define (dim-loaded? variable);check
+  (if (equal? 'dim-loaded (get-element 'type variable)) #t #f))
+(define (dim-tagged? variable)
+  (if (equal? 'dim-tagged (get-element 'type variable)) #t #f))
+(define (wt-tree? variable);check
+  (if (equal? 'wt-tree (get-element 'type variable)) #t #f))
 
+;; below need to implement
+(define (matrix? variable)
+  (if (equal? 'matrix (get-element 'type variable)) #t #f))
+(define (hast-table? variable)
+  (if (equal? 'hast-table (get-element 'type variable)) #t #f))
+(define (vector? variable)
+  (if (equal? 'vector (get-element 'type variable)) #t #f))
+
+(define (remove-type variable)
+  (del-assoc 'type variable))
+
+(define (tag-type tag variable)
+  (if (assoc 'type variable)
+      (cons (pair 'type tag) (remove-type variable))
+      (cons (pair 'type tag))))
 
 (define (load-var-data var-meta)
   (let* ((ncid (get-element 'ncid var-meta))
@@ -493,8 +515,18 @@
                      (display ", adding int index")
                      (map (lambda (key val)
                             (pair key (list-tabulate val (lambda (x) x))))
-                          keys vals)))))
-    (add-element 'dimensions loaded-dims variable)))
+                          keys vals))))
+         (dimensions (filter (lambda (x)
+                               (if (> (length (get-value x)) 1) #t #f))
+                             loaded-dims))
+         (single-dimensions (filter (lambda (x)
+                               (if (< (length (get-value x)) 2) #t #f))
+                        loaded-dims)))
+    (add-element 'single-dimensions
+                 single-dimensions
+                 (add-element 'dimensions
+                              dimensions
+                              (tag-type 'dim-loaded variable)))))
 
 (define (get-key a-element)
   (car a-element))
@@ -502,9 +534,7 @@
   (cdr a-element))
 
 (define (list-data->tree-data variable)
-  (let* ((variable (cond ((not (assoc 'dimensions variable))
-                          (list-data->labeled-data (add-dims variable)))
-                         ((not (assoc 'tagged-dims variable))
+  (let* ((variable (cond ((not (dim-tagged? variable))
                           (list-data->labeled-data variable))
                          (else variable)))
          (tree-var (del-assoc 'data variable)))
@@ -520,24 +550,18 @@
                   (make-wt-tree-type
                    dim<?)
                   (get-element 'data variable))
-                 tree-var)))
+                 (tag-type 'wt-tree tree-var))))
+
 
 (define (list-data->labeled-data variable)
   ;; takes in raw list of data and makes an alist with each key the coordinates
   (let* ((variable (if (not (assoc 'dimensions variable))
                       (add-dims variable)
                       variable))
-         (dimensions (filter (lambda (x)
-                               (if (> (length (get-value x)) 1) #t #f))
-                             (get-element 'dimensions variable)))
+         (dimensions (get-element 'dimensions variable))
          (dim-values (map get-value dimensions))
          (data (get-element 'data variable))
-         (labelled-var (del-assoc 'data variable))
-         ;; document actual tagged dims and their order and length
-         (labelled-var (add-element 'tagged-dims (map (lambda (x)
-                              (pair (get-key x) (length (get-value x))))
-                            dimensions)
-                                    labelled-var)))
+         (labelled-var (del-assoc 'data variable)))
     (define (tag-data dim-val dat)
       ;; note we still have access to dimvalues
       (let loop ((dim-val dim-val)
@@ -567,7 +591,9 @@
                     ;; else, advance loop
                     (cons first (loop (cdr new-dims)
                                       (cdr orig-dims)))))))))
-    (add-element 'data (tag-data dim-values data) labelled-var)))
+    (add-element 'data
+                 (tag-data dim-values data)
+                 (tag-type 'dim-tagged labelled-var))))
 
 (define (find-nearest val lis)
   ;; assumes list numeric and sorted small to large,
@@ -591,7 +617,7 @@
         (dimensions (let ((dimensions (get-element 'dimensions lab-data)))
                       (map (lambda (key)
                              (get-element key dimensions))
-                           (get-keys (get-element 'tagged-dims lab-data))))))
+                           (get-keys (get-element 'dimensions lab-data))))))
     (if (= (length dimensions) (length coords))
         (let ((exact-coords (map find-nearest coords dimensions)))
           (assoc exact-coords data))
@@ -603,13 +629,14 @@
         (dimensions (let ((dimensions (get-element 'dimensions tree-data)))
                       (map (lambda (key)
                              (get-element key dimensions))
-                           (get-keys (get-element 'tagged-dims tree-data))))))
+                           (get-keys (get-element 'dimensions tree-data))))))
     (if (= (length dimensions) (length coords))
         (let ((exact-coords (map find-nearest coords dimensions)))
           `(,exact-coords . ,(wt-tree/lookup data exact-coords #f)))
         (error "supplied dimension of coords do not match dim. of data"
                (list coords (length dimensions))))))
-#f
 
+
+#f
 
 
