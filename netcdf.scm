@@ -501,6 +501,27 @@
 (define (get-value a-element)
   (cdr a-element))
 
+(define (list-data->tree-data variable)
+  (let* ((variable (cond ((not (assoc 'dimensions variable))
+                          (list-data->labeled-data (add-dims variable)))
+                         ((not (assoc 'tagged-dims variable))
+                          (list-data->labeled-data variable))
+                         (else variable)))
+         (tree-var (del-assoc 'data variable)))
+    ;; much slower if you reverse the dims
+    ;; (define (reverse-dim a b)
+    ;;   (dim<? (reverse a) (reverse b)))
+    (define (dim<? a b)
+      (cond ((null? a) #f)
+            ((< (car a) (car b)) #t)
+            (else (dim<? (cdr a) (cdr b)))))
+    (add-element 'data
+                 (alist->wt-tree
+                  (make-wt-tree-type
+                   dim<?)
+                  (get-element 'data variable))
+                 tree-var)))
+
 (define (list-data->labeled-data variable)
   ;; takes in raw list of data and makes an alist with each key the coordinates
   (let* ((variable (if (not (assoc 'dimensions variable))
@@ -546,19 +567,7 @@
                     ;; else, advance loop
                     (cons first (loop (cdr new-dims)
                                       (cdr orig-dims)))))))))
-    ;; much slower if you reverse the dims
-    ;; (define (reverse-dim a b)
-    ;;   (dim<? (reverse a) (reverse b)))
-    (define (dim<? a b)
-      (cond ((null? a) #f)
-            ((< (car a) (car b)) #t)
-            (else (dim<? (cdr a) (cdr b)))))
-    (add-element 'data
-                 (alist->wt-tree
-                  (make-wt-tree-type
-                   dim<?)
-                  (tag-data dim-values data))
-                 labelled-var)))
+    (add-element 'data (tag-data dim-values data) labelled-var)))
 
 (define (find-nearest val lis)
   ;; assumes list numeric and sorted small to large,
@@ -585,10 +594,21 @@
                            (get-keys (get-element 'tagged-dims lab-data))))))
     (if (= (length dimensions) (length coords))
         (let ((exact-coords (map find-nearest coords dimensions)))
-          `(,exact-coords . ,(wt-tree/lookup data exact-coords #f)))
+          (assoc exact-coords data))
         (error "supplied dimension of coords do not match dim. of data"
                (list coords (length dimensions))))))
 
+(define (index-tree coords tree-data)
+  (let ((data (get-element 'data tree-data))
+        (dimensions (let ((dimensions (get-element 'dimensions tree-data)))
+                      (map (lambda (key)
+                             (get-element key dimensions))
+                           (get-keys (get-element 'tagged-dims tree-data))))))
+    (if (= (length dimensions) (length coords))
+        (let ((exact-coords (map find-nearest coords dimensions)))
+          `(,exact-coords . ,(wt-tree/lookup data exact-coords #f)))
+        (error "supplied dimension of coords do not match dim. of data"
+               (list coords (length dimensions))))))
 #f
 
 
