@@ -275,8 +275,8 @@
   (if (equal? 'wt-tree (get-element 'type variable)) #t #f))
 
 ;; below need to implement
-(define (matrix? variable)
-  (if (equal? 'matrix (get-element 'type variable)) #t #f))
+(define (array? variable)
+  (if (equal? 'array (get-element 'type variable)) #t #f))
 (define (hast-table? variable)
   (if (equal? 'hast-table (get-element 'type variable)) #t #f))
 (define (vector? variable)
@@ -486,6 +486,12 @@
 
 
 
+(define (and-list x)
+  (if (null? x)
+      #t
+      (if (car x)
+          (and-l (cdr x))
+          #f)))
 
 
 ;;;; conversion scripts
@@ -503,9 +509,9 @@
          (keys (get-keys dims))
          (vals (alist->list dims))
          (loaded-dims
-          (if (and (map (lambda (key)
-                                (var-exists? ncid key))
-                              keys))
+          (if (and-list (map (lambda (key)
+                               (var-exists? ncid key))
+                             keys))
               (map (lambda (key)
                      (let ((variable (make-var-data meta key)))
                        (pair key (get-element 'data variable))))
@@ -551,6 +557,34 @@
                    dim<?)
                   (get-element 'data variable))
                  (tag-type 'wt-tree tree-var))))
+
+(define (list-data->array variable)
+  ;; right now only support for two dims, but okay
+  ;; because really think this will only be used
+  ;; for plotting purposes
+  (let* ((variable (cond ((raw? variable)
+                          (add-dims variable))
+                         (else variable)))
+         (data (cond ((dim-tagged? variable)
+                      (list->vector (map get-value
+                                         (get-element 'data variable))))
+                     (else (list->vector (get-element 'data variable)))))
+         (array-var (del-assoc 'data variable))
+         (dimensions (get-element 'dimensions array-var)))
+    (if (> (length dimensions) 2)
+        (error "->array called on var with more than two dims"
+               (length dimensions)))
+    (let* ((first-dim (length (car dimensions)))
+           (second-dim (length (cadr dimensions)))
+           (start-idx (list-tabulate second-dim
+                                     (lambda (x) (* first-dim x))))
+           (end-idx (map (lambda (x) (+ x second-dim)) start-idx)))
+      ;; generate a list of (row) vectors, each one equal to len second-dim
+      ;; array, for e.g. see /kernel/iterat.scm
+      (apply vector (map (lambda (start end)
+                           (subvector data start end))
+                         start-idx
+                         end-idx)))))
 
 
 (define (list-data->labeled-data variable)
@@ -640,3 +674,8 @@
 #f
 
 
+(define data
+  (let* ((metadata (make-meta
+                    "./testing/simple_xy_nc4.nc"))
+         (data (make-var-data metadata "data")))
+    (list-data->array data)))
