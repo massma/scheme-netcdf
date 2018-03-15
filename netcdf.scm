@@ -20,6 +20,7 @@
 
 (declare (usual-integrations))
 (load-option 'ffi)
+(load-option 'wt-tree)
 (C-include "netcdf")
 
 
@@ -545,8 +546,18 @@
                     ;; else, advance loop
                     (cons first (loop (cdr new-dims)
                                       (cdr orig-dims)))))))))
+    ;; much slower if you reverse the dims
+    ;; (define (reverse-dim a b)
+    ;;   (dim<? (reverse a) (reverse b)))
+    (define (dim<? a b)
+      (cond ((null? a) #f)
+            ((< (car a) (car b)) #t)
+            (else (dim<? (cdr a) (cdr b)))))
     (add-element 'data
-                 (alist->hash-table (tag-data dim-values data))
+                 (alist->wt-tree
+                  (make-wt-tree-type
+                   dim<?)
+                  (tag-data dim-values data))
                  labelled-var)))
 
 (define (find-nearest val lis)
@@ -573,8 +584,8 @@
                              (get-element key dimensions))
                            (get-keys (get-element 'tagged-dims lab-data))))))
     (if (= (length dimensions) (length coords))
-        `(,coords . ,(hash-table/get
-                      data (map find-nearest coords dimensions) #f))
+        (let ((exact-coords (map find-nearest coords dimensions)))
+          `(,exact-coords . ,(wt-tree/lookup data exact-coords #f)))
         (error "supplied dimension of coords do not match dim. of data"
                (list coords (length dimensions))))))
 
