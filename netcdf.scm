@@ -46,8 +46,8 @@
 ;;   `(,key . ,value))
 (define (pair key value)
   (if (not (list? value))
-      `(,key . (,value))
-      `(,key . ,value)))
+      (cons key (list value))
+      (cons key value)))
 
 
 ;; file-level metadata (using ncdump rather than c ffi)
@@ -490,7 +490,7 @@
   (if (null? x)
       #t
       (if (car x)
-          (and-l (cdr x))
+          (and-list (cdr x))
           #f)))
 
 
@@ -607,7 +607,7 @@
                 '()
                 (error "dat reached null before dims - check index"
                        (list dim-val)))
-            (cons `(,(map car dim-val) . ,(car dat))
+            (cons (cons (map car dim-val) (car dat))
                   (loop (null-check-and-advance dim-val)
                         (cdr dat))))))
     (define (null-check-and-advance dim-val)
@@ -672,7 +672,9 @@
         (error "supplied dimension of coords do not match dim. of data"
                (list coords (length dimensions))))))
 
+(define (load-tree metadata var)
+  (let ((raw (make-var-data metadata var)))
+    (list-data->tree-data raw)))
 
-#f
 
 

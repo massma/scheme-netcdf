@@ -14,3 +14,9 @@ var = df['irwin_cdr'].load()
 test = var.values
 print('time to load irwin_cdr: %f s' % (time.time()-start))
 
+start = time.time()
+plt.figure()
+df['irwin_cdr'].plot()
+plt.savefig('temp.png')
+print('time to plot irwin_cdr: %f s' % (time.time()-start))
+
