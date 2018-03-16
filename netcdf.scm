@@ -570,7 +570,7 @@
                                          (get-element 'data variable))))
                      (else (list->vector (get-element 'data variable)))))
          (array-var (del-assoc 'data variable))
-         (dimensions (get-element 'dimensions array-var)))
+         (dimensions (map get-value (get-element 'dimensions array-var))))
     (if (> (length dimensions) 2)
         (error "->array called on var with more than two dims"
                (length dimensions)))
@@ -578,13 +578,15 @@
            (second-dim (length (cadr dimensions)))
            (start-idx (list-tabulate second-dim
                                      (lambda (x) (* first-dim x))))
-           (end-idx (map (lambda (x) (+ x second-dim)) start-idx)))
+           (end-idx (map (lambda (x) (+ x first-dim)) start-idx)))
       ;; generate a list of (row) vectors, each one equal to len second-dim
       ;; array, for e.g. see /kernel/iterat.scm
-      (apply vector (map (lambda (start end)
-                           (subvector data start end))
-                         start-idx
-                         end-idx)))))
+      (add-element 'data
+                   (apply vector (map (lambda (start end)
+                                              (subvector data start end))
+                                            start-idx
+                                            end-idx))
+                   (tag-type 'array array-var)))))
 
 
 (define (list-data->labeled-data variable)
@@ -605,7 +607,7 @@
                 '()
                 (error "dat reached null before dims - check index"
                        (list dim-val)))
-            (cons (pair (map car dim-val) (car dat))
+            (cons `(,(map car dim-val) . ,(car dat))
                   (loop (null-check-and-advance dim-val)
                         (cdr dat))))))
     (define (null-check-and-advance dim-val)
@@ -674,8 +676,3 @@
 #f
 
 
-(define data
-  (let* ((metadata (make-meta
-                    "./testing/simple_xy_nc4.nc"))
-         (data (make-var-data metadata "data")))
-    (list-data->array data)))
