@@ -39,8 +39,16 @@
        alist))))
 
 
+(define (round-off n)
+  (let ((power (expt 10 n)))
+    (lambda (z)
+      (/ (round (* power z)) power))))
+
+(define (rounder num)
+  (/ (round (* 100 num)) 100))
+
 (define (write-key key)
-  (write (exact->inexact key))
+  (write (exact->inexact (rounder key)))
   (display " "))
 
 (define (gnuplot-write-wt-tree wt-tree row-ender? filename)
@@ -49,7 +57,7 @@
       (wt-tree/for-each
        (lambda (keys value)
          (for-each write-key keys)
-         (write (exact->inexact value))
+         (write (exact->inexact (rounder value)))
          (newline)
          (if (row-ender? keys)
              (newline)))
@@ -99,6 +107,7 @@
      (let ((command (string-append
                      "gnuplot -p -e \'"
                      "set view map; "
+                     "set datafile missing \"#[NaN]\"; "
                      "splot \""
                      (->namestring pathname)
                      "\" "
