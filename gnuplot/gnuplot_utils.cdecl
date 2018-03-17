@@ -1,0 +1,6 @@
+#| -*-Scheme-*-
+
+C declarations for write-gnuplot.scm. |#
+
+(extern int write_var
+        (var (* float)))

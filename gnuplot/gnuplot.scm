@@ -16,7 +16,8 @@
 ;;; You should have received a copy of the GNU Affero General Public
 ;;; License along with Adaptive Plot.  If not, see
 ;;; <http://www.gnu.org/licenses/>.
-
+(load-option 'ffi)
+(c-include "gnuplot_utils")
 (declare (usual-integrations))
 
 ;;;; Gnuplot output of alist data
@@ -37,6 +38,11 @@
 	 (write (exact->inexact (cdr x.y)))
 	 (newline))
        alist))))
+
+(define (write-c float)
+  (let ((alien (malloc (c-sizeof "float") 'float)))
+    (c->= alien "float" float)
+    (c-call "write_var" alien)))
 
 
 (define (round-off n)
