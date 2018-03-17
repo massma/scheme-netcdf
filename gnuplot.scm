@@ -16,8 +16,9 @@
 ;;; You should have received a copy of the GNU Affero General Public
 ;;; License along with Adaptive Plot.  If not, see
 ;;; <http://www.gnu.org/licenses/>.
+
 (load-option 'ffi)
-(c-include "gnuplot_utils")
+;; (c-include "gnuplot_utils")
 (declare (usual-integrations))
 
 ;;;; Gnuplot output of alist data
@@ -39,10 +40,10 @@
 	 (newline))
        alist))))
 
-(define (write-c float)
-  (let ((alien (malloc (c-sizeof "float") 'float)))
-    (c->= alien "float" float)
-    (c-call "write_var" alien)))
+;; (define (write-c float)
+;;   (let ((alien (malloc (c-sizeof "float") 'float)))
+;;     (c->= alien "float" float)
+;;     (c-call "write_var" alien)))
 
 
 (define (round-off n)
@@ -55,19 +56,30 @@
 
 (define (write-key key)
   (write (exact->inexact (rounder key)))
-  (write-string " "))
+  (write-string " ")
+  ;;(write-c (exact->inexact key))
+  )
+
+;; (define (with-output-to-binary-file pathname thunk)
+;;   (call-with-binary-output-file
+;;    pathname
+;;    (lambda (port)
+;;      (parameterize* (cons (cons current-output-port port) '()) thunk))))
 
 (define (gnuplot-write-wt-tree wt-tree row-ender? filename)
-  (with-output-to-file filename
-    (lambda ()
-      (wt-tree/for-each
-       (lambda (keys value)
-         (for-each write-key keys)
-         (write (exact->inexact (rounder value)))
-         (newline)
-         (if (row-ender? keys)
-             (newline)))
-       wt-tree))))
+  (;;with-output-to-binary-file filename
+   with-output-to-file filename
+      (lambda ()
+        (wt-tree/for-each
+         (lambda (keys value)
+           (for-each write-key keys)
+           (write (exact->inexact (rounder value)))
+           (newline)
+           (if (row-ender? keys)
+               (newline))
+           ;;(write-c (exact->inexact value))
+           )
+         wt-tree))))
 
 (define (gen-row-ender dimensions)
   ;; maybe to handle single dim files put if single dim return #f
