@@ -20,3 +20,8 @@ df['irwin_cdr'].plot()
 plt.savefig('temp.png')
 print('time to plot irwin_cdr: %f s' % (time.time()-start))
 
+var_df = var.to_dataframe()
+
+start = time.time()
+var_df.to_csv("isccp_df.out")
+print('time to write irwin_cdr: %f s' % (time.time()-start))

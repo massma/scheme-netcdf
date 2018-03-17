@@ -33,7 +33,7 @@
       (for-each
        (lambda (x.y)
 	 (write (exact->inexact (car x.y)))
-	 (display " ")
+	 (write-string " ")
 	 (write (exact->inexact (cdr x.y)))
 	 (newline))
        alist))))
@@ -49,7 +49,7 @@
 
 (define (write-key key)
   (write (exact->inexact (rounder key)))
-  (display " "))
+  (write-string " "))
 
 (define (gnuplot-write-wt-tree wt-tree row-ender? filename)
   (with-output-to-file filename
@@ -78,9 +78,8 @@
 (define (write-vector row)
   (vector-for-each (lambda (element)
                      (write (exact->inexact element))
-                     (display " "))
+                     (write-string " "))
                    row))
-
 (define (gnuplot-write-array array filename)
   (with-output-to-file filename
     (lambda ()
