@@ -116,19 +116,19 @@
                  "/bin/sh"
                  (list->vector
                   (cons "/bin/sh" (os/form-shell-command "gnuplot -p")))
-                 #f))
-         (port (subprocess-input-port process)))
-    (map (lambda (string) (write-string string port))
-         (list "set view map\n"
-               "set datafile missing \"#[NaN]\"\n"
-               "splot \"-\" using 1:2:3 with image\n"))
-    (gnuplot-write-wt-tree (get-element 'data variable)
-                           (gen-row-ender (get-element 'dimensions variable))
-                           port)
-    (write "exit\n" port)
-    (flush-output-port port)
-    (subprocess-quit process)
-    (subprocess-delete process)))
+                 #f)))
+    (parameterize ((current-output-port (subprocess-input-port process)))
+      (map (lambda (string) (write-string string (current-output-port)))
+           (list "set view map\n"
+                 "set datafile missing \"#[NaN]\"\n"
+                 "splot \"-\" using 1:2:3 with image\n"))
+      (gnuplot-write-wt-tree (get-element 'data variable)
+                             (gen-row-ender (get-element 'dimensions variable))
+                             (current-output-port))
+      (write "exit\n" (current-output-port))
+      (flush-output-port (current-output-port))
+      (subprocess-quit process)
+      (subprocess-delete process))))
 
 ;; A "lax alist" is a list whose pairs are treated as alist elements,
 ;; but which is allowed to have non-pairs also (which are ignored).
