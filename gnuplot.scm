@@ -28,6 +28,7 @@
 ;;; Adaptive Plot, so can be lifted and used elsewhere.
 
 (load-option 'synchronous-subprocess)
+(load-option 'subprocess)
 
 (define (gnuplot-write-alist alist filename)
   (with-output-to-file filename
@@ -54,9 +55,9 @@
 (define (rounder num)
   (/ (round (* 100 num)) 100))
 
-(define (write-key key)
-  (write (exact->inexact (rounder key)))
-  (write-string " ")
+(define (write-key key port)
+  (write (exact->inexact (rounder key)) port)
+  (write-string " " port)
   ;;(write-c (exact->inexact key))
   )
 
@@ -66,20 +67,16 @@
 ;;    (lambda (port)
 ;;      (parameterize* (cons (cons current-output-port port) '()) thunk))))
 
-(define (gnuplot-write-wt-tree wt-tree row-ender? filename)
-  (;;with-output-to-binary-file filename
-   with-output-to-file filename
-      (lambda ()
-        (wt-tree/for-each
-         (lambda (keys value)
-           (for-each write-key keys)
-           (write (exact->inexact (rounder value)))
-           (newline)
-           (if (row-ender? keys)
-               (newline))
-           ;;(write-c (exact->inexact value))
-           )
-         wt-tree))))
+(define (gnuplot-write-wt-tree wt-tree row-ender? port)
+  ;;with-output-to-binary-file filename
+  (wt-tree/for-each
+   (lambda (keys value)
+     (for-each (lambda (key) (write-key key port)) keys)
+     (write (exact->inexact (rounder value)) port)
+     (write-char #\newline port)
+     (if (row-ender? keys)
+         (write-char #\newline port)))
+   wt-tree))
 
 (define (gen-row-ender dimensions)
   ;; maybe to handle single dim files put if single dim return #f
@@ -115,24 +112,23 @@
                             "wt-tree. currently, only wt-tree plotting"
                             "is supported")
              (get-element 'type variable)))
-  (call-with-temporary-file-pathname
-   (lambda (pathname)
-     (map display (list  "writing to " pathname))
-     (gnuplot-write-wt-tree (get-element 'data variable)
-                            (gen-row-ender (get-element 'dimensions variable))
-                            pathname)
-     (let ((command (string-append
-                     "gnuplot -p -e \'"
-                     "set view map; "
-                     "set datafile missing \"#[NaN]\"; "
-                     "splot \""
-                     (->namestring pathname)
-                     "\" "
-                     "using 1:2:3 with image"
-                     "'")))
-       (display command)
-       (newline)
-       (run-shell-command command)))))
+  (let* ((process (start-pipe-subprocess
+                 "/bin/sh"
+                 (list->vector
+                  (cons "/bin/sh" (os/form-shell-command "gnuplot -p")))
+                 #f))
+         (port (subprocess-input-port process)))
+    (map (lambda (string) (write-string string port))
+         (list "set view map\n"
+               "set datafile missing \"#[NaN]\"\n"
+               "splot \"-\" using 1:2:3 with image\n"))
+    (gnuplot-write-wt-tree (get-element 'data variable)
+                           (gen-row-ender (get-element 'dimensions variable))
+                           port)
+    (write "exit\n" port)
+    (flush-output-port port)
+    (subprocess-quit process)
+    (subprocess-delete process)))
 
 ;; A "lax alist" is a list whose pairs are treated as alist elements,
 ;; but which is allowed to have non-pairs also (which are ignored).
@@ -144,46 +140,7 @@
         (cadr binding)
         default)))
 
-(define process (start-pipe-subprocess
-                 "/bin/sh"
-                 (list->vector
-                  (cons "/bin/sh" (os/form-shell-command "gnuplot"))) 
-                 #f))
-(define process (start-subprocess-in-background
-                 "/bin/sh"
-                 (list->vector
-                  (cons "/bin/sh" (os/form-shell-command "gnuplot"))) 
-                                       #f))
-(define input-port (subprocess-input-port process))
-(define output-port (subprocess-input-port process))
-
-
-
-
-
 ;; below worked, not you als omight not need to flush manually
 ;; when using this in practice, as buffering should flush when
 ;; the output starts getting full. should test performance of
 ;; manual flushing.
-(define process (start-pipe-subprocess
-                 "/bin/sh"
-                 (list->vector
-                  (cons "/bin/sh" (os/form-shell-command "gnuplot"))) 
-                 #f))
-;Unspecified return value
-(define input-port (subprocess-input-port process))
-;Unspecified return value
-
-
-(write-string "plot [-10:10] sin(x),atan(x),cos(atan(x))\n" input-port)
-;Unspecified return value
-
-(flush-output-port input-port)
-;Unspecified return value
-
-(write-string "exit\n" input-port)
-;Unspecified return value
-
-(flush-output-port input-port)
-;Unspecified return value
-
