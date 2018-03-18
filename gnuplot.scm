@@ -57,7 +57,7 @@
 
 (define (write-key key port)
   (write (exact->inexact (rounder key)) port)
-  (write-string " " port)
+  (write-char #\space port)
   ;;(write-c (exact->inexact key))
   )
 
