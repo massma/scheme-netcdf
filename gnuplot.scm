@@ -143,3 +143,50 @@
         ;; rather than pairs, so this does not iterpret proper alists.
         (cadr binding)
         default)))
+
+(define process (start-pipe-subprocess
+                 "/bin/sh"
+                 (list->vector
+                  (cons "/bin/sh" (os/form-shell-command "gnuplot"))) 
+                 #f))
+(define process (start-subprocess-in-background
+                 "/bin/sh"
+                 (list->vector
+                  (cons "/bin/sh" (os/form-shell-command "gnuplot"))) 
+                                       #f))
+(define input-port (subprocess-input-port process))
+(define output-port (subprocess-input-port process))
+
+
+
+
+
+;; below worked, not you als omight not need to flush manually
+;; when using this in practice, as buffering should flush when
+;; the output starts getting full. should test performance of
+;; manual flushing.
+(define process (start-pipe-subprocess
+                 "/bin/sh"
+                 (list->vector
+                  (cons "/bin/sh" (os/form-shell-command "gnuplot"))) 
+                 #f))
+;Unspecified return value
+(define input-port (subprocess-input-port process))
+;Unspecified return value
+
+
+(write-string "plot [-10:10] sin(x),atan(x),cos(atan(x))" input-port)
+;Unspecified return value
+
+(write-char #\newline input-port)
+;Unspecified return value
+
+(flush-output-port input-port)
+;Unspecified return value
+
+(write-string "exit\n" input-port)
+;Unspecified return value
+
+(flush-output-port input-port)
+;Unspecified return value
+
