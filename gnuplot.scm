@@ -175,10 +175,7 @@
 ;Unspecified return value
 
 
-(write-string "plot [-10:10] sin(x),atan(x),cos(atan(x))" input-port)
-;Unspecified return value
-
-(write-char #\newline input-port)
+(write-string "plot [-10:10] sin(x),atan(x),cos(atan(x))\n" input-port)
 ;Unspecified return value
 
 (flush-output-port input-port)
