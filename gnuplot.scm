@@ -18,7 +18,7 @@
 ;;; <http://www.gnu.org/licenses/>.
 
 (load-option 'ffi)
-;; (c-include "gnuplot_utils")
+(c-include "gnuplot_utils")
 (declare (usual-integrations))
 
 ;;;; Gnuplot output of alist data
@@ -41,10 +41,10 @@
 	 (newline))
        alist))))
 
-;; (define (write-c float)
-;;   (let ((alien (malloc (c-sizeof "float") 'float)))
-;;     (c->= alien "float" float)
-;;     (c-call "write_var" alien)))
+(define (write-c float)
+  (let ((alien (malloc (c-sizeof "float") 'float)))
+    (c->= alien "float" float)
+    (c-call "write_var" alien)))
 
 
 (define (round-off n)
@@ -56,9 +56,9 @@
   (/ (round (* 100 num)) 100))
 
 (define (write-key key port)
-  (write (exact->inexact (rounder key)) port)
-  (write-char #\space port)
-  ;;(write-c (exact->inexact key))
+  ;; (write (exact->inexact (rounder key)) port)
+  ;; (write-char #\space port)
+  (write-c (exact->inexact key))
   )
 
 ;; (define (with-output-to-binary-file pathname thunk)
@@ -72,10 +72,11 @@
   (wt-tree/for-each
    (lambda (keys value)
      (for-each (lambda (key) (write-key key port)) keys)
-     (write (exact->inexact (rounder value)) port)
-     (write-char #\newline port)
-     (if (row-ender? keys)
-         (write-char #\newline port)))
+     ;; (write (exact->inexact (rounder value)) port)
+     ;; (write-char #\newline port)
+     ;; (if (row-ender? keys)
+     ;;     (write-char #\newline port))
+     (write-c (exact->inexact value)))
    wt-tree))
 
 (define (gen-row-ender dimensions)
