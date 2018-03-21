@@ -56,7 +56,7 @@
   (/ (round (* 100 num)) 100))
 
 (define (write-key key port)
-  (write (exact->inexact (rounder key)) port)
+  (write-string (number->string (rounder key)) port)
   (write-char #\space port)
   ;;(write-c (exact->inexact key))
   )
@@ -72,7 +72,7 @@
   (wt-tree/for-each
    (lambda (keys value)
      (for-each (lambda (key) (write-key key port)) keys)
-     (write (exact->inexact (rounder value)) port)
+     (write-string (number->string (rounder value)) port)
      (write-char #\newline port)
      (if (row-ender? keys)
          (write-char #\newline port))
@@ -94,7 +94,7 @@
 
 (define (write-vector row)
   (vector-for-each (lambda (element)
-                     (write (exact->inexact element))
+                     (write-string (number->string element))
                      (write-string " "))
                    row))
 (define (gnuplot-write-array array filename)
@@ -105,6 +105,12 @@
          (write-vector row)
          (newline))
        array))))
+
+(define (gnuplot-test variable)
+  (let ((tree (get-element 'data variable)))
+    (with-output-to-file "temp.out"
+      (lambda ()
+        (write tree)))))
 
 (define (gnuplot-cmap variable dimmap)
   ;; should add functionality where you acn give a dim
