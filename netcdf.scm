@@ -20,8 +20,10 @@
 (declare (usual-integrations))
 (load-option 'ffi)
 (load-option 'wt-tree)
+(load-option 'gdbm2)
 (C-include "netcdf")
 
+(import-gdbm2)
 ;; below should probably go into a file somewhere
 ;; useful definitions
 (define (zero)
@@ -676,5 +678,21 @@
   (let ((raw (make-var-data metadata var)))
     (list-data->tree-data raw)))
 
+(define (load-gdbm metadata-var)
+  (let ((raw (make-var-data metadata var)))
+    (list-data->gdbm raw)))
 
-
+(define (list-data->gdbm variable)
+  (let* ((variable (cond ((not (dim-tagged? variable))
+                          (list-data->labeled-data variable))
+                         (else variable)))
+         (gdbm-var (del-assoc 'data variable))
+         (dbf (gdbm-open "testdb.db" 65536 gdbm_wrcreat 755)))
+    ;; should probably signal error on gdbm return #f (repeat key)
+    (for-each (lambda (key.item)
+                (gdbm-store dbf
+                            (string (car key.item))
+                            (cdr key.item)
+                            gdbm_insert))
+              (get-element 'data variable))
+    (add-element 'data (tag-type 'gdbm gdbm-var))))
