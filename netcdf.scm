@@ -687,7 +687,7 @@
                           (list-data->labeled-data variable))
                          (else variable)))
          (gdbm-var (del-assoc 'data variable))
-         (dbf (gdbm-open "testdb.db" 65536 gdbm_wrcreat 755)))
+         (dbf (gdbm-open "testdb.gdbm" -1 gdbm_wrcreat 755)))
     ;; should probably signal error on gdbm return #f (repeat key)
     (for-each (lambda (key.item)
                 (gdbm-store dbf
