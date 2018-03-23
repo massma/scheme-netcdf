@@ -20,7 +20,7 @@
 (declare (usual-integrations))
 (load-option 'ffi)
 (load-option 'wt-tree)
-(load-option 'gdbm2)
+(load-option 'gdbm)
 (C-include "netcdf")
 
 (import-gdbm2)
@@ -692,7 +692,22 @@
     (for-each (lambda (key.item)
                 (gdbm-store dbf
                             (string (car key.item))
-                            (cdr key.item)
+                            (number->string (cdr key.item))
                             gdbm_insert))
               (get-element 'data variable))
-    (add-element 'data (tag-type 'gdbm gdbm-var))))
+    (add-element 'data dbf (tag-type 'gdbm gdbm-var))))
+
+(define (index-gdbm coords gdbm-data)
+  (let ((dbf (get-element 'data gdbm-data))
+        (dimensions (let ((dimensions (get-element 'dimensions gdbm-data)))
+                      (map (lambda (key)
+                             (get-element key dimensions))
+                           (get-keys (get-element 'dimensions gdbm-data))))))
+    (if (= (length dimensions) (length coords))
+        (let ((exact-coords (map find-nearest coords dimensions)))
+          (cons exact-coords (string->number
+                              (gdbm-fetch dbf (string exact-coords)))))
+        (error "supplied dimension of coords do not match dim. of data"
+               (list coords (length dimensions))))))
+
+
