@@ -478,11 +478,6 @@
   (cadr a-element))
 
 
-
-
-
-
-
 ;;; below for getting whatever type is in file
 ;;; note alternatively we could just load everything as float
 (define (get-peek type)
@@ -528,9 +523,6 @@
                       ("float" . ,(c-sizeof "float"))
                       ("double" . ,(c-sizeof "double"))))
 
-
-
-
 (define (index coords variable)
   ;; return data element closes to the given coords
   ;; from the labelled data structure
@@ -553,13 +545,15 @@
 (define (calc-index index-list shape)
   (let ((rev-index (reverse index-list))
         (rev-shape (reverse shape)))
-    (+ (car rev-index)
+    (fix:+ (car rev-index)
        (let loop ((index (cdr rev-index))
-                  (shape rev-shape))
+                  (shape rev-shape)
+                  (mult 1))
          (if (null? index)
              0
-             (+ (* (car index) (car shape))
-                (loop (cdr index) (cdr shape))))))))
+             (fix:+
+              (fix:* (car index) (fix:* mult (car shape)))
+              (loop (cdr index) (cdr shape) (fix:* mult (car shape)))))))))
 
 
 (define (find-nearest val vec)
@@ -580,30 +574,8 @@
                  (list (vector-ref vec (fix:+ i 1)) (fix:+ i 1))))
             (else (loop (fix:+ i 1)))))))
 
-(define data
-  (let* ((metadata (make-meta
-                    (string-append
-                     "/home/adam/scratch/data/"
-                     "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
-         (variable (make-var-data metadata "irwin_cdr")))
-    (define variable (with-timings
-                      (lambda () (make-var-data metadata "irwin_cdr"))
-                      (lambda (run-time gc-time real-time)
-                        (newline) (display "run time: ")
-                        (write (internal-time/ticks->seconds run-time))
-                        (write-char #\space) (newline) (display "gc time: ")
-                        (write (internal-time/ticks->seconds gc-time))
-                        (write-char #\space) (newline) (display "wall time: ")
-                        (write (internal-time/ticks->seconds real-time))
-                        (newline))))
-    (with-timings
-     (lambda () (index '(0.0 0.0) variable))
-     (lambda (run-time gc-time real-time)
-       (newline) (display "run time: ")
-       (write (internal-time/ticks->seconds run-time))
-       (write-char #\space) (newline) (display "gc time: ")
-       (write (internal-time/ticks->seconds gc-time))
-       (write-char #\space) (newline) (display "wall time: ")
-       (write (internal-time/ticks->seconds real-time))
-       (newline)))
-    variable))
+
+;; (pp (let loop ((n 1))
+;;       (if (fix:fixnum? n)
+;;           (loop (* n 2))
+;;           (- n 1))))
