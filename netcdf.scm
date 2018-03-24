@@ -544,7 +544,7 @@
          (variable (make-var-data metadata "data")))
     variable))
 
-(define (index-data coords variable)
+(define (index coords variable)
   ;; return data element closes to the given coords
   ;; from the labelled data structure
   (let ((data (get 'data variable))
