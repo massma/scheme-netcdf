@@ -269,8 +269,8 @@
                               post-processing)))
     (post-processing (list (pair 'data var-data)
                            (pair 'meta var-meta)
-                           (pair 'shape (map get-value
-                                             (get 'dims var-meta)))))))
+                           (pair 'shape (alist->list
+                                         (get-list 'dims var-meta)))))))
 
 (define (load-var-data var-meta)
   (let* ((ncid (get 'ncid var-meta))
@@ -530,19 +530,6 @@
 
 
 
-(define data
-  (let* ((metadata (make-meta
-                    (string-append
-                     "/home/adam/scratch/data/"
-                     "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
-         (variable (make-var-data metadata "irwin_cdr")))
-    variable))
-
-(define data
-  (let* ((metadata (make-meta
-                    "./testing/simple_xy_nc4.nc"))
-         (variable (make-var-data metadata "data")))
-    variable))
 
 (define (index coords variable)
   ;; return data element closes to the given coords
@@ -592,3 +579,31 @@
                  (list (vector-ref vec i) i)
                  (list (vector-ref vec (fix:+ i 1)) (fix:+ i 1))))
             (else (loop (fix:+ i 1)))))))
+
+(define data
+  (let* ((metadata (make-meta
+                    (string-append
+                     "/home/adam/scratch/data/"
+                     "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
+         (variable (make-var-data metadata "irwin_cdr")))
+    (define variable (with-timings
+                      (lambda () (make-var-data metadata "irwin_cdr"))
+                      (lambda (run-time gc-time real-time)
+                        (newline) (display "run time: ")
+                        (write (internal-time/ticks->seconds run-time))
+                        (write-char #\space) (newline) (display "gc time: ")
+                        (write (internal-time/ticks->seconds gc-time))
+                        (write-char #\space) (newline) (display "wall time: ")
+                        (write (internal-time/ticks->seconds real-time))
+                        (newline))))
+    (with-timings
+     (lambda () (index '(0.0 0.0) variable))
+     (lambda (run-time gc-time real-time)
+       (newline) (display "run time: ")
+       (write (internal-time/ticks->seconds run-time))
+       (write-char #\space) (newline) (display "gc time: ")
+       (write (internal-time/ticks->seconds gc-time))
+       (write-char #\space) (newline) (display "wall time: ")
+       (write (internal-time/ticks->seconds real-time))
+       (newline)))
+    variable))
