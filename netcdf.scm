@@ -260,12 +260,17 @@
       (dimids . ,(alien->list alien-dimids ndims "int"))
       (natts . (,(c-> alien-natts "int"))))))
 
-(define (make-var-data meta name)
+(define (make-var-data meta name #!optional post-processing)
+  
   (let* ((var-meta (load-var-meta meta name))
-         (var-data (load-var-data var-meta)))
-    (add-dims (list (pair 'data var-data)
-                    (pair 'meta var-meta)
-                    (pair 'type 'raw)))))
+         (var-data (load-var-data var-meta))
+         (post-processing (if (default-object? post-processing)
+                              add-dims
+                              post-processing)))
+    (post-processing (list (pair 'data var-data)
+                           (pair 'meta var-meta)
+                           (pair 'shape (map get-value
+                                             (get 'dims var-meta)))))))
 
 (define (load-var-data var-meta)
   (let* ((ncid (get 'ncid var-meta))
@@ -444,8 +449,8 @@
                                (var-exists? ncid key))
                              keys))
               (map (lambda (key)
-                     (let ((variable (make-var-data meta key)))
-                       (pair key (get 'data variable))))
+                     (pair key (make-var-data
+                                meta key (lambda (var) (get 'data var)))))
                    keys)
               (begin (newline) (display "No dimesion data for ")
                      (display (get 'name meta))
@@ -472,34 +477,9 @@
 (define (get-value a-element)
   (cadr a-element))
 
-(define (find-nearest val lis)
-  ;; assumes list numeric and sorted small to large,
-  ;; finds closest value in lis to val
-  (if (< val (car lis))
-      (error "val smaller than range of list"
-             (list val (car lis))))
-  (let loop ((li lis))
-    (cond ((null? (cdr li)) (error "val larger than range of list"
-                                   (list val (car li))))
-          ((< val (cadr li)) (if (< (abs (- val (car li)))
-                                    (abs (- val (cadr li))))
-                                 (car li)
-                                 (cadr li)))
-          (else (loop (cdr li))))))
 
-(define (index-data coords lab-data)
-  ;; return data element closes to the given coords
-  ;; from the labelled data structure
-  (let ((data (get 'data lab-data))
-        (dimensions (let ((dimensions (get 'dimensions lab-data)))
-                      (map (lambda (key)
-                             (get key dimensions))
-                           (get-keys (get 'dimensions lab-data))))))
-    (if (= (length dimensions) (length coords))
-        (let ((exact-coords (map find-nearest coords dimensions)))
-          (assoc exact-coords data))
-        (error "supplied dimension of coords do not match dim. of data"
-               (list coords (length dimensions))))))
+
+
 
 
 
@@ -550,24 +530,13 @@
 
 
 
-;; (define data
-;;   (let* ((metadata (make-meta
-;;                     ;;"./testing/simple_xy_nc4.nc"
-;;                     (string-append
-;;                      "/home/adam/scratch/data/"
-;;                      "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")
-;;                     ))
-;;          ;;(variable (list-data->labeled-data (make-var-data metadata "data")))
-;;          (variable
-;;           (make-var-data metadata "irwin_cdr"))
-;;          ;;(tree (load-tree metadata "irwin_cdr"))
-;;          )
-;;     ;; (gnuplot-write-wt-tree (get-element 'data tree)
-;;     ;;                        (gen-row-ender (get-element 'dimensions tree))
-;;     ;;                        "./binary.out")
-    
-;;     ;; (gnuplot-cmap tree '())
-;;     variable))
+(define data
+  (let* ((metadata (make-meta
+                    (string-append
+                     "/home/adam/scratch/data/"
+                     "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")))
+         (variable (make-var-data metadata "irwin_cdr")))
+    variable))
 
 (define data
   (let* ((metadata (make-meta
@@ -575,21 +544,51 @@
          (variable (make-var-data metadata "data")))
     variable))
 
-;; (define data
-;;   (let* ((metadata (make-meta
-;;                     ;;"./testing/simple_xy_nc4.nc"
-;;                     (string-append
-;;                      "/home/adam/scratch/data/"
-;;                      "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc")
-;;                     ))
-;;          ;;(variable (list-data->labeled-data (make-var-data metadata "data")))
-;;          (variable
-;;           (make-var-data metadata "irwin_cdr"))
-;;          ;;(tree (load-tree metadata "irwin_cdr"))
-;;          )
-;;     ;; (gnuplot-write-wt-tree (get-element 'data tree)
-;;     ;;                        (gen-row-ender (get-element 'dimensions tree))
-;;     ;;                        "./binary.out")
-    
-;;     ;; (gnuplot-cmap tree '())
-;;     variable))
+(define (index-data coords variable)
+  ;; return data element closes to the given coords
+  ;; from the labelled data structure
+  (let ((data (get 'data variable))
+        (dimensions (let ((dimensions (get 'dimensions variable)))
+                      (map (lambda (key)
+                             (get key dimensions))
+                           (get-keys (get 'dimensions variable))))))
+    (if (= (length dimensions) (length coords))
+        (let* ((exact-coords (map find-nearest coords dimensions)))
+          (cons (map car exact-coords)
+                (vector-ref
+                 data
+                 (calc-index (map cadr exact-coords)
+                             (get-list 'shape variable)))))
+        (error "supplied dimension of coords do not match dim. of data"
+               (list coords (length dimensions))))))
+
+;; accepts a list of exact coords and idices
+(define (calc-index index-list shape)
+  (let ((rev-index (reverse index-list))
+        (rev-shape (reverse shape)))
+    (+ (car rev-index)
+       (let loop ((index (cdr rev-index))
+                  (shape rev-shape))
+         (if (null? index)
+             0
+             (+ (* (car index) (car shape))
+                (loop (cdr index) (cdr shape))))))))
+
+
+(define (find-nearest val vec)
+  ;; assumes list numeric and sorted small to large,
+  ;; finds closest value in lis to val
+  (if (< val (vector-ref vec 0))
+      (error "val smaller than range of list"
+             (list val (vector-ref vec))))
+  (let ((length (vector-length vec)))
+    (let loop ((i 0))
+      (cond ((fix:= length i) (error "val larger than range of list"
+                                     (list val (vector-ref vec
+                                                           (fix:- length 1)))))
+            ((< val (vector-ref vec (fix:+ i 1)))
+             (if (< (abs (- val (vector-ref vec i)))
+                    (abs (- val (vector-ref vec (fix:+ i 1)))))
+                 (list (vector-ref vec i) i)
+                 (list (vector-ref vec (fix:+ i 1)) (fix:+ i 1))))
+            (else (loop (fix:+ i 1)))))))
