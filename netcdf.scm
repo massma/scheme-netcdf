@@ -318,7 +318,7 @@
   (assoc key structure))
 
 (define (alist->list structure)
-  (map (lambda (x) (car (get-value x))) structure))
+  (map (lambda (x) (get-value x)) structure))
 
 (define (get-keys structure)
   (map get-key structure))
@@ -451,7 +451,9 @@
                      (display (get 'name meta))
                      (display ", adding int index")
                      (map (lambda (key val)
-                            (pair key (list-tabulate val (lambda (x) x))))
+                            (pair key
+                                  (list->vector
+                                   (list-tabulate val (lambda (x) x)))))
                           keys vals))))
          (dimensions (filter (lambda (x)
                                (if (> (vector-length (get-value x)) 1) #t #f))
@@ -468,8 +470,7 @@
 (define (get-key a-element)
   (car a-element))
 (define (get-value a-element)
-  (cdr a-element))
-
+  (cadr a-element))
 
 (define (find-nearest val lis)
   ;; assumes list numeric and sorted small to large,
@@ -571,8 +572,7 @@
 (define data
   (let* ((metadata (make-meta
                     "./testing/simple_xy_nc4.nc"))
-
-         (make-var-data metadata "irwin_cdr"))
+         (variable (make-var-data metadata "data")))
     variable))
 
 ;; (define data
