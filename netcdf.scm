@@ -654,7 +654,7 @@
     ;; dimensions is an alist of key, value pairs
     ;; outputs new alist of key, new dimensions pairs
     (let ((dim-keys (get-keys dimensions))
-          (new-vectors (car new-dims)))
+          (new-vectors (map car new-dims)))
       (map pair dim-keys new-vectors)))
 
 
@@ -666,8 +666,8 @@
          (new-shape (map length idxs))
          (new-length (apply * new-shape))
          (new-vec (make-vector new-length nan)))
-    (define (advance-index-list idxs)
-      (let ((reverse-idx (reverse idxs)))
+    (define (advance-index-list old-idxs)
+      (let ((reverse-idx (reverse old-idxs)))
         (let ((advanced-index
                (cons (cdr (car reverse-idx))
                      (cdr reverse-idx))))
@@ -688,15 +688,17 @@
                                          (cdr orig-index)))))))))))
     (let loop-idx ((i 0)
                    (index-list idxs)
+                   (loop-list idxs)
                    (indices '()))
       (if (fix:= i new-length)
           new-vec
-          (if (null? index-list)
-              (begin (vector-set! new-vec i
-                                  (vector-ref data (calc-index indices shape)))
-                     (loop-idx (fix:+ i 1) (advance-index-list idxs) '()))
-              (loop-idx i (cdr index-list)
-                        (append indices (list (car (car index-list))))))))))
+          (if (null? loop-list)
+              (let ((adv-idx (advance-index-list index-list)))
+                (vector-set! new-vec i
+                             (vector-ref data (calc-index indices shape)))
+                (loop-idx (fix:+ i 1) adv-idx adv-idx '()))
+              (loop-idx i index-list (cdr loop-list)
+                        (append indices (list (car (car loop-list))))))))))
 
 (define (index-new coords variable)
   ;; return data element closes to the given coords
