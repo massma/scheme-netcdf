@@ -541,6 +541,9 @@
         (error "supplied dimension of coords do not match dim. of data"
                (list coords (length dimensions))))))
 
+
+
+
 ;; accepts a list of exact coords and idices
 (define (calc-index index-list shape)
   (let ((rev-index (reverse index-list))
@@ -554,6 +557,7 @@
              (fix:+
               (fix:* (car index) (fix:* mult (car shape)))
               (loop (cdr index) (cdr shape) (fix:* mult (car shape)))))))))
+
 
 
 (define (find-nearest val vec)
@@ -570,10 +574,141 @@
             ((< val (vector-ref vec (fix:+ i 1)))
              (if (< (abs (- val (vector-ref vec i)))
                     (abs (- val (vector-ref vec (fix:+ i 1)))))
-                 (list (vector-ref vec i) i)
-                 (list (vector-ref vec (fix:+ i 1)) (fix:+ i 1))))
+                 (list (vector-ref vec i) (list i))
+                 (list (vector-ref vec (fix:+ i 1)) (list (fix:+ i 1)))))
             (else (loop (fix:+ i 1)))))))
 
+(define (select-coords val vec)
+  ;; assumes list numeric and sorted small to large,
+  ;; finds closest value in lis to val
+  (define (between? value compare1 compare2)
+    (or (and (>= value compare1) (<= value compare2))
+        (and (<= value compare1) (>= value compare2))))
+  (let ((length (vector-length vec)))
+    (let loop ((i 0))
+      (if (fix:= (fix:- length 1) i)
+          (error "val not between any dimensions"
+                 (list val
+                       (vector-ref vec 0)
+                       (vector-ref vec (fix:- length 1))))
+          (let ((cur-val (vector-ref vec i))
+                (next-val (vector-ref vec (fix:+ i 1))))
+            (if (betwen? val cur-val next-val)
+                (if (< (abs (- val cur-val))
+                       (abs (- val next-val)))
+                    (list (vector cur-val)
+                          (list i))
+                    (list (vector next-val)
+                          (list (fix:+ i 1))))
+                (loop (fix:+ i 1))))))))
+
+(define (slice-vector val vec)
+  ;; assumes list numeric and sorted small to large,
+  ;; finds closest value in lis to val
+  (if (not (pair? val)) (error "slice should be defined by pair" val))
+  (let ((length (vector-length vec))
+        (min-val (car val))
+        (max-val (cdr val)))
+    (let loop ((i 0)
+               (idx-list '())
+               (val-list '()))
+      (if  (fix:= length i)
+           (list (list->vector val-list) idx-list)
+           (let ((current-val (vector-ref vec i)))
+             (if (and (> current-val min-val) (< current-val max-val))
+                 (loop (fix:+ i 1)
+                       (append idx-list (list i))
+                       (append val-list (list current-val)))
+                 (loop (fix:+ i 1) idx-list val-list)))))))
+
+(define (gen-new-dims val dimension)
+  ;; takes a list of coordinates (do not need to be exact
+  ;; outputs a list two elements: vector of exact coordinates, and index of list
+  (let ((vec (get-value dimension)))
+    (cond ((pair? val) (slice-vector val vec))
+          ((equal? val 'all) (list vec (list-tabulate (vector-length vec)
+                                                      (lambda (x) x))))
+          ((number? val) (select-coords val vec)); should modify so idx in list
+          (else (error "invalid slice")))))
+
+
+(define (calc-index index-list shape)
+  (let ((rev-index (reverse index-list))
+        (rev-shape (reverse shape)))
+    (fix:+ (car rev-index)
+       (let loop ((index (cdr rev-index))
+                  (shape rev-shape)
+                  (mult 1))
+         (if (null? index)
+             0
+             (fix:+
+              (fix:* (car index) (fix:* mult (car shape)))
+              (loop (cdr index) (cdr shape) (fix:* mult (car shape)))))))))
+
+(define (build-dimension new-dims dimensions)
+    ;; new-dims is a list of 2-element lists, frist vec of dims dims,
+    ;; second list of indexes
+    ;; dimensions is an alist of key, value pairs
+    ;; outputs new alist of key, new dimensions pairs
+    (let ((dim-keys (map get-keys dimensions))
+          (new-vectors (car new-dims)))
+      (map pair dim-keys new-vectors)))
+
+
+
+(define (slice-dimension new-dims variable)
+  (let* ((idxs (map cadr new-dims))
+         (data (get 'data variable))
+         (shape (get 'shape variable))
+         (new-shape (map vector-length idxs))
+         (new-vec (make-vector (apply * new-shape) nan)))
+    (define (advance-index-list idxs)
+      (let ((reverse-idx (reverse idxs)))
+        (let ((advanced-index
+               (cons (cdr (car reverse-idx))
+                     (cdr reverse-idx))))
+          (reverse
+           (let loop ((new-index advanced-index)
+                      (orig-index (reverse idxs)))
+             (if (null? (cdr new-index))
+                 new-index              ;'()
+                 (let ((first (car new-index))
+                       (second (cadr new-index)))
+                   (if (null? first)
+                       ;; reset first and advance second
+                       (cons (car orig-index)
+                             (loop (cons (cdr second) (cddr new-index))
+                                   (cdr orig-index)))
+                       ;; else, advance loop
+                       (cons first (loop (cdr new-index)
+                                         (cdr orig-index)))))))))))
+    (let loop-idx ((i 0)
+                   (index-list idxs)
+                   (indices '()))
+      (if (null? index-list)
+          (begin (vector-set! new-vec i
+                              (vector-ref data (calc-index indices shape)))
+                 (loop-idx (fix:+ i 1) (advance-index-list idxs) '()))
+          (loop-idx i (cdr index-list)
+                    (append indices (list (car (car index-list)))))))))
+
+(define (index-new coords variable)
+  ;; return data element closes to the given coords
+  ;; from the labelled data structure
+  (let ((data (get 'data variable))
+        (dimensions (get 'dimensions variable))
+        (new-var (del-assoc 'dimensions
+                              (del-assoc 'data variable))))
+    (if (= (length dimensions) (length coords))
+        (let* ((new-dims (map gen-new-dims coords dimensions)))
+          (add-element 'dimensions
+                       (build-dimension new-dims dimensions)
+                       new-var)
+          (add-element 'data
+                       (slice-dimension new-dims variable)
+                       new-var))
+        (error "supplied dimension of coords do not match dim. of data"
+               (list coords (length dimensions))))))
 
 ;; (pp (let loop ((n 1))
 ;;       (if (fix:fixnum? n)
