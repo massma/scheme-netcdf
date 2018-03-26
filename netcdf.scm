@@ -328,6 +328,9 @@
 (define (get-keys structure)
   (map get-key structure))
 
+(define (get-values structure)
+  (map (lambda (key) (get key structure)) (get-keys structure)))
+
 ;;;; dimension functions
 (define (make-dim-meta var-meta)
   (if (key-exists? 'dims var-meta)
@@ -593,7 +596,7 @@
                        (vector-ref vec (fix:- length 1))))
           (let ((cur-val (vector-ref vec i))
                 (next-val (vector-ref vec (fix:+ i 1))))
-            (if (betwen? val cur-val next-val)
+            (if (between? val cur-val next-val)
                 (if (< (abs (- val cur-val))
                        (abs (- val next-val)))
                     (list (vector cur-val)
@@ -650,7 +653,7 @@
     ;; second list of indexes
     ;; dimensions is an alist of key, value pairs
     ;; outputs new alist of key, new dimensions pairs
-    (let ((dim-keys (map get-keys dimensions))
+    (let ((dim-keys (get-keys dimensions))
           (new-vectors (car new-dims)))
       (map pair dim-keys new-vectors)))
 
@@ -660,8 +663,9 @@
   (let* ((idxs (map cadr new-dims))
          (data (get 'data variable))
          (shape (get 'shape variable))
-         (new-shape (map vector-length idxs))
-         (new-vec (make-vector (apply * new-shape) nan)))
+         (new-shape (map length idxs))
+         (new-length (apply * new-shape))
+         (new-vec (make-vector new-length nan)))
     (define (advance-index-list idxs)
       (let ((reverse-idx (reverse idxs)))
         (let ((advanced-index
@@ -685,28 +689,43 @@
     (let loop-idx ((i 0)
                    (index-list idxs)
                    (indices '()))
-      (if (null? index-list)
-          (begin (vector-set! new-vec i
-                              (vector-ref data (calc-index indices shape)))
-                 (loop-idx (fix:+ i 1) (advance-index-list idxs) '()))
-          (loop-idx i (cdr index-list)
-                    (append indices (list (car (car index-list)))))))))
+      (if (fix:= i new-length)
+          new-vec
+          (if (null? index-list)
+              (begin (vector-set! new-vec i
+                                  (vector-ref data (calc-index indices shape)))
+                     (loop-idx (fix:+ i 1) (advance-index-list idxs) '()))
+              (loop-idx i (cdr index-list)
+                        (append indices (list (car (car index-list))))))))))
 
 (define (index-new coords variable)
   ;; return data element closes to the given coords
   ;; from the labelled data structure
   (let ((data (get 'data variable))
         (dimensions (get 'dimensions variable))
-        (new-var (del-assoc 'dimensions
-                              (del-assoc 'data variable))))
+        (new-var (del-assoc
+                  'dimensions
+                  (del-assoc 'data
+                             (del-assoc 'single-dimensions
+                                        (del-assoc 'shape variable))))))
     (if (= (length dimensions) (length coords))
-        (let* ((new-dims (map gen-new-dims coords dimensions)))
+        (let* ((new-dims (map gen-new-dims coords dimensions))
+               (dims (build-dimension new-dims dimensions)))
           (add-element 'dimensions
-                       (build-dimension new-dims dimensions)
-                       new-var)
-          (add-element 'data
-                       (slice-dimension new-dims variable)
-                       new-var))
+                       (filter (lambda (x)
+                                 (> (vector-length (get-value x)) 1))
+                               dims)
+                       (add-element
+                        'single-dimensions
+                        (filter (lambda (x)
+                                  (< (vector-length (get-value x)) 2))
+                                dims)
+                        (add-element 'data
+                                     (slice-dimension new-dims variable)
+                                     (add-element 'shape
+                                                  (map vector-length
+                                                       (get-values dims))
+                                                  new-var)))))
         (error "supplied dimension of coords do not match dim. of data"
                (list coords (length dimensions))))))
 
@@ -714,3 +733,9 @@
 ;;       (if (fix:fixnum? n)
 ;;           (loop (* n 2))
 ;;           (- n 1))))
+(define data
+  (let* ((metadata (make-meta
+                    "./testing/simple_xy_nc4.nc"))
+         (variable (make-var-data metadata "data")))
+    variable))
+
