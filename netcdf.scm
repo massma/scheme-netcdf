@@ -618,7 +618,7 @@
       (if  (fix:= length i)
            (list (list->vector val-list) idx-list)
            (let ((current-val (vector-ref vec i)))
-             (if (and (> current-val min-val) (< current-val max-val))
+             (if (and (>= current-val min-val) (<= current-val max-val))
                  (loop (fix:+ i 1)
                        (append idx-list (list i))
                        (append val-list (list current-val)))
