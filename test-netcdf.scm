@@ -54,7 +54,7 @@
                                 (list-tabulate 6 (lambda (x) x)))))
              "all-sliced dimensions unequal to expected values")
       (check (equal? (get 'single-dimensions sliced-var)
-                     (list (pair "y" (list->vector (list 3)))))
+                     (pair "y" (list->vector (list 3))))
              "all-sliced single dimensions unequal to expected values")
       (let* ((sliced-var (index (list 2) sliced-var))
              (data (get 'data sliced-var))
@@ -101,36 +101,3 @@
 (run-registered-tests)
 (cd "../")
 
-;; (define data
-;;   (let* ((metadata (make-meta
-;;                     (string-append
-;;                      "/home/adam/scratch/data/"
-;;                      "isccp/b1/GRIDSAT-B1.1987.05.03.18.v02r01.nc"))))
-;;     (define data (with-timings
-;;                   (lambda () (make-var-data metadata "irwin_cdr"))
-;;                   (lambda (run-time gc-time real-time)
-;;                     (newline) (display "run time: ")
-;;                     (write (internal-time/ticks->seconds run-time))
-;;                     (write-char #\space) (newline) (display "gc time: ")
-;;                     (write (internal-time/ticks->seconds gc-time))
-;;                     (write-char #\space) (newline) (display "wall time: ")
-;;                     (write (internal-time/ticks->seconds real-time))
-;;                     (newline))))
-;;     (close-ncid metadata)
-;;     data))
-
-
-
-
-;; (pp (get-element 'meta data))
-;; (list-ref (get-element 'data data) 1949924)
-;; (pa list-ref)
-;; (let* ((meta (make-meta nc-filename))
-;;                        (data (make-var-data meta "data")))
-;;                   (close-ncid meta)
-;;                   data)
-(equal? (get 'dimensions data)
-        (list (pair "x" (list->vector
-                         (list-tabulate 6 (lambda (x) x))))
-              (pair "y" (list->vector
-                         (list-tabulate 12 (lambda (x) x))))))
