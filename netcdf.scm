@@ -526,26 +526,6 @@
                       ("float" . ,(c-sizeof "float"))
                       ("double" . ,(c-sizeof "double"))))
 
-(define (index coords variable)
-  ;; return data element closes to the given coords
-  ;; from the labelled data structure
-  (let ((data (get 'data variable))
-        (dimensions (let ((dimensions (get 'dimensions variable)))
-                      (map (lambda (key)
-                             (get key dimensions))
-                           (get-keys (get 'dimensions variable))))))
-    (if (= (length dimensions) (length coords))
-        (let* ((exact-coords (map find-nearest coords dimensions)))
-          (cons (map car exact-coords)
-                (vector-ref
-                 data
-                 (calc-index (map cadr exact-coords)
-                             (get-list 'shape variable)))))
-        (error "supplied dimension of coords do not match dim. of data"
-               (list coords (length dimensions))))))
-
-
-
 
 ;; accepts a list of exact coords and idices
 (define (calc-index index-list shape)
@@ -658,7 +638,6 @@
       (map pair dim-keys new-vectors)))
 
 
-
 (define (slice-dimension new-dims variable)
   (let* ((idxs (map cadr new-dims))
          (data (get 'data variable))
@@ -700,11 +679,12 @@
               (loop-idx i index-list (cdr loop-list)
                         (append indices (list (car (car loop-list))))))))))
 
-(define (index-new coords variable)
+(define (index coords variable)
   ;; return data element closes to the given coords
   ;; from the labelled data structure
   (let ((data (get 'data variable))
-        (dimensions (get 'dimensions variable))
+        (dimensions (get-list 'dimensions variable))
+        (single-dims (get-list 'single-dimensions variable))
         (new-var (del-assoc
                   'dimensions
                   (del-assoc 'data
@@ -712,22 +692,24 @@
                                         (del-assoc 'shape variable))))))
     (if (= (length dimensions) (length coords))
         (let* ((new-dims (map gen-new-dims coords dimensions))
-               (dims (build-dimension new-dims dimensions)))
-          (add-element 'dimensions
-                       (filter (lambda (x)
-                                 (> (vector-length (get-value x)) 1))
-                               dims)
-                       (add-element
-                        'single-dimensions
-                        (filter (lambda (x)
+               (dims (build-dimension new-dims dimensions))
+               (new-var (add-element
+                         'dimensions
+                         (filter (lambda (x)
+                                   (> (vector-length (get-value x)) 1))
+                                 dims)
+                         (add-element 'data
+                                      (slice-dimension new-dims variable)
+                                      (add-element 'shape
+                                                   (map vector-length
+                                                        (get-values dims))
+                                                   new-var))))
+               (new-single-dims (filter (lambda (x)
                                   (< (vector-length (get-value x)) 2))
-                                dims)
-                        (add-element 'data
-                                     (slice-dimension new-dims variable)
-                                     (add-element 'shape
-                                                  (map vector-length
-                                                       (get-values dims))
-                                                  new-var)))))
+                                dims)))
+          (add-element 'single-dimensions
+                       (append new-single-dims single-dims)
+                       new-var))
         (error "supplied dimension of coords do not match dim. of data"
                (list coords (length dimensions))))))
 
