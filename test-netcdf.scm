@@ -27,7 +27,7 @@
                         (utf8->string new))))
                 (call-with-output-string (lambda (port)
                                            (run-shell-command
-                                            "./gen-version.exe"
+                                            "./testing/gen-version.exe"
                                             'output port)))
          "scheme netcdf-version incorrect"))
 
