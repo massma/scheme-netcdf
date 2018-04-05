@@ -21,41 +21,16 @@
 (load-option 'ffi)
 (C-include "netcdf")
 
-;; below should probably go into a file somewhere
-;; useful definitions
-(define (zero)
-  (identity-procedure 0.))
 
-(define nan
-  (flo:with-exceptions-untrapped (flo:exception:invalid-operation)
-                                 (lambda ()
-                                   (flo:/ (zero) (zero)))))
-
-(define inf+
-  (flo:with-exceptions-untrapped (flo:exception:divide-by-zero)
-    (lambda ()
-      (flo:/ +1. (zero)))))
-
-(define inf-
-  (flo:with-exceptions-untrapped (flo:exception:divide-by-zero)
-    (lambda ()
-      (flo:/ -1. (zero)))))
-
-;; (define (pair key value)
-;;   `(,key . ,value))
-(define (pair key value)
-  (if (not (list? value))
-      (cons key (list value))
-      (cons key value)))
-
-;; file-level metadata (using ncdump rather than c ffi)
+;;; Below are functions designed to be used by user
 (define (make-meta filename)
+  ;; file-level metadata (using ncdump rather than c ffi)
   (let*
       ((string
-         (call-with-output-string (lambda (port)
-                                    (run-shell-command
-                                     (string-append "ncdump -h " filename)
-                                     'output port))))
+        (call-with-output-string (lambda (port)
+                                   (run-shell-command
+                                    (string-append "ncdump -h " filename)
+                                    'output port))))
        (string-list
         ((string-splitter 'delimiter #\newline 'copy? #t) string))
        (joiner
@@ -73,7 +48,7 @@
           (if (null? (cdr newline-list))
               (list startstr "has no values")
               (split-list (cdr newline-list) startstr endstr))))
-    
+
     (define (var-filter? line)
       (if (or (substring? "long_name" line)
               (substring? "float" line)
@@ -96,7 +71,232 @@
       (attributes
        . (,(apply joiner (split-list string-list "// global attributes:" "}"))))
       (filename . (,filename))
-      (ncid . (,(load-ncid filename))))))
+      (ncid . (,(load-ncid filename)))))
+  (define (load-ncid filename)
+    (let* ((alien-ncid (malloc (c-sizeof "int") 'int))
+           (out (C-call "nc_open" (->cstring filename) 0 alien-ncid)))
+      (cond ((= 0 out) (newline) (display "loading ncid sucessful"))
+            ((= -61 out) (error "not enough memory" filename))
+            ((= -101 out) (error "Error at HDF5 layer" filename))
+            ((= -106 out) (error "Problem with dimension metadata" filename))
+            ((alien-null? alien-ncid)
+             (error "could't open file-unspecified reason" filename))
+            (else (display "WARNING: unspecified response: ") (display out)))
+      (C-> alien-ncid "int"))))
+
+(define (make-var-data meta name #!optional post-processing)
+  (let* ((var-meta (load-var-meta meta name))
+         (var-data (load-var-data var-meta))
+         (post-processing (if (default-object? post-processing)
+                              add-dims
+                              post-processing)))
+    (post-processing (list (pair 'data var-data)
+                           (pair 'meta var-meta)
+                           (pair 'shape (alist->list
+                                         (get-list 'dims var-meta))))))
+  (define (load-var-meta metadata varname)
+    (let* ((ncid (get 'ncid metadata))
+           (varid (load-varid metadata varname))
+           (alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
+           (alien-xtype (malloc (c-sizeof "int") 'nc_type))
+           (alien-ndims (malloc (c-sizeof "int") 'int))
+           ;; below max 10 dims, but should really call to get ndims first
+           (alien-dimids (malloc (* 10 (c-sizeof "int")) 'int))
+           (alien-natts (malloc (c-sizeof "int") 'int))
+           (out (c-call "nc_inq_var" ncid varid alien-name
+                        alien-xtype alien-ndims alien-dimids
+                        alien-natts)))
+      (cond ((= 0 out))   ;(newline) (display "loading var sucessful")
+            ((= -49 out) (error "Variable not found" varid))
+            ((= -33 out) (error "Not a netcdf id" varid))
+            ((alien-null? alien-ndims)
+             (error "could't load var- unspecified reason" varid))
+            (else (error "unspecified response")))
+      (let* ((var-meta
+              (make-dim-meta
+               (make-var-structure
+                metadata varid alien-name alien-xtype
+                alien-ndims alien-dimids alien-natts)))
+             (att-names (load-att-names var-meta)))
+        ;; add atts to var-meta,
+        ;; and return the metadata structure
+        (add-element 'atts
+                     (map (lambda (name)
+                            (load-att var-meta name))
+                          att-names)
+                     var-meta)))
+    (define (load-varid metadata var-name)
+      (let* ((alien-varid (malloc (c-sizeof "int") 'int))
+             (ncid (get 'ncid metadata))
+             (out (C-call "nc_inq_varid" ncid
+                          (->cstring var-name) alien-varid)))
+        (cond ((= 0 out) (newline) (display "loading varid sucessful"))
+              ((= -33 out) (error "Not a netcdf id." ncid))
+              ((alien-null? alien-varid)
+               (error "could't open file-unspecified reason" ncid))
+              (else (error "unspecified response")))
+        (C-> alien-varid "int")))
+
+    (define (make-dim-meta var-meta)
+      (if (key-exists? 'dims var-meta)
+          (error "Called make-dim-meta but dims already exists" var-meta)
+          (add-element
+           'dims
+           (map (lambda (dimid)
+                  (load-dim-meta (get 'ncid var-meta) dimid))
+                (get-list 'dimids var-meta))
+           var-meta))
+      (define (load-dim-meta ncid dimid)
+        (let* ((alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
+               (alien-len (malloc (c-sizeof "ulong") '(* size_t)))
+               (out (c-call "nc_inq_dim" ncid dimid alien-name alien-len)))
+          (cond ((= 0 out)) ;(newline) (display "loading var sucessful")
+                ((= -46 out) (error "Bad dim name" dimid))
+                ((= -33 out) (error "Not a netcdf id" ncid))
+                ((alien-null? alien-len)
+                 (error "could't load var- unspecified reason" varid))
+                (else (error "unspecified response")))
+          (pair (alien->string alien-name) (c-> alien-len "ulong")))))
+
+    (define (load-att-names var-meta)
+      (define (load-attname ncid varid attnum)
+        ;; ony loads single att name
+        (let* ((alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
+               (out (c-call "nc_inq_attname" ncid varid attnum alien-name)))
+          (cond ((= 0 out)) ;(newline) (display "loading var sucessful")
+                ((= -33 out) (error "Not a netcdf id" ncid))
+                ((= -49 out) (error "Bad varid" varid))
+                ((= -116 out) (error "Bad group id" varid))
+                ;; note there are more error codes, im too lazy to do
+                ;; I should have made a univsersal error-check gen func
+                ((alien-null? alien-name)
+                 (error "could't load att-name - unspecified reason" varid))
+                (else (error "unspecified response")))
+          (alien->string alien-name)))
+      ;; get each name of att for loading by load-att
+      (map (lambda (attnum)
+             (load-attname (get 'ncid var-meta)
+                           (get 'varid var-meta)
+                           attnum))
+           (list-tabulate (get 'natts var-meta) (lambda (x) x))))
+
+    (define (load-att var-meta name)
+      ;; load and build attributes
+      (let* ((ncid (get 'ncid var-meta))
+             (varid (get 'varid var-meta))
+             (xtype (malloc (c-sizeof "int") 'nc_type))
+             (len (malloc (c-sizeof "ulong") 'size_t))
+             (out (c-call "nc_inq_att" ncid varid name xtype len)))
+        (if (not (equal? out 0))
+            (error "failed to load attribute metadata code:" out))
+        (let* ((nelements (c-> len "ulong"))
+               (type (alien->type xtype))
+               (loader
+                (lambda ()
+                  (let* ((alien-data (malloc (* nelements
+                                                (get-c-sizeof type))
+                                             (string->symbol type)))
+                         (out (c-call "nc_get_att" ncid
+                                      varid name alien-data)))
+                    (if (not (equal? out 0))
+                        (error "failed to load attribute, code: " out)
+                        (if (equal? type "char")
+                            (utf8->string
+                             (list->bytevector
+                              (alien->list alien-data nelements type)))
+                            (alien->list alien-data nelements type)))))))
+          (pair name (loader)))))
+
+    (define (make-var-structure metadata varid alien-name alien-xtype
+                                alien-ndims alien-dimids alien-natts)
+      (let ((ndims (c-> alien-ndims "int") ))
+        `((filename . (,(get 'filename metadata)))
+          (ncid . (,(get 'ncid metadata)))
+          (name . (,(alien->string alien-name)))
+          (varid . (,varid))
+          (xtype . (,(alien->type alien-xtype)))
+          (ndims . (,ndims))
+          (dimids . ,(alien->list alien-dimids ndims "int"))
+          (natts . (,(c-> alien-natts "int")))))))
+
+  (define (load-var-data var-meta)
+    (let* ((ncid (get 'ncid var-meta))
+           (varid (get 'varid var-meta))
+           (nelements (apply * (alist->list (get-list 'dims var-meta))))
+           (type (get 'xtype var-meta))
+           (alien-var (malloc (* nelements (get-c-sizeof type))
+                              (string->symbol type)))
+           (out (c-call "nc_get_var" ncid varid alien-var)))
+      (cond ((= 0 out))  ; (newline) (display "loading var sucessful")
+            ((= -49 out) (error "Variable not found" varid))
+            ((= -60 out) (error "Math result not representable" varid))
+            ((= -39 out) (error "Operation not allowed in define mode" varid))
+            ((= -33 out) (error "Not a netcdf id" varid))
+            ((alien-null? alien-ncid)
+             (error "could't load var- unspecified reason" varid))
+            (else (error "unspecified response")))
+      (alien->vector alien-var nelements type (build-processor var-meta))
+      (define (build-processor var-meta)
+;;; makes a function for converted stored values to float,
+;;; i.e. if we have scale factors and offsets, etc.
+        (let* ((attrs (get 'atts var-meta))
+               (fillv (if (assoc "_FillValue" attrs)
+                          (get "_FillValue" attrs)
+                          (begin (newline)
+                                 (display "WARNING - no fill value")
+                                 nan)))
+               (offset (if (assoc "add_offset" attrs)
+                           (get "add_offset" attrs)
+                           0))
+               (scale (if (assoc "scale_factor" attrs)
+                          (get "scale_factor" attrs)
+                          1))
+               (valid_range (if (assoc "valid_range" attrs)
+                                (get "valid_range" attrs)
+                                (list inf- inf+)))
+               (min (car valid_range))
+               (max (cadr valid_range)))
+          (lambda (element)
+            (if (eqv? element fillv)
+                nan
+                (let ((value (+ offset (* element scale))))
+                  (if (or (< value min) (> value max))
+                      nan ;;(error "value out of expected range")
+                      value))))))))
+
+  (define (add-dims variable)
+    (let* ((meta (get 'meta variable))
+           (ncid (get 'ncid meta))
+           (dims (get 'dims meta))
+           (keys (get-keys dims))
+           (vals (alist->list dims))
+           (loaded-dims
+            (if (and-list (map (lambda (key)
+                                 (var-exists? ncid key))
+                               keys))
+                (map (lambda (key)
+                       (pair key (make-var-data
+                                  meta key (lambda (var) (get 'data var)))))
+                     keys)
+                (begin (newline) (display "No dimesion data for ")
+                       (display (get 'name meta))
+                       (display ", adding int index")
+                       (map (lambda (key val)
+                              (pair key
+                                    (list->vector
+                                     (list-tabulate val (lambda (x) x)))))
+                            keys vals))))
+           (dimensions (filter (lambda (x)
+                                 (if (> (vector-length (get-value x)) 1) #t #f))
+                               loaded-dims))
+           (single-dimensions (filter (lambda (x)
+                                        (if (< (vector-length (get-value x)) 2) #t #f))
+                                      loaded-dims)))
+      (add-element 'single-dimensions
+                   single-dimensions
+                   (add-element 'dimensions
+                                dimensions
+                                variable)))))
 
 (define (get key structure)
   (let ((value (assoc key structure)))
@@ -107,55 +307,210 @@
               output))
         (error "key not in structure" (list key (map get-key structure))))))
 
+(define (index coords variable)
+  ;; return data element closes to the given coords
+  ;; from the labelled data structure
+  (let ((data (get 'data variable))
+        (dimensions (get-list 'dimensions variable))
+        (single-dims (get-list 'single-dimensions variable))
+        (new-var (del-assoc
+                  'dimensions
+                  (del-assoc 'data
+                             (del-assoc 'single-dimensions
+                                        (del-assoc 'shape variable))))))
+    (if (= (length dimensions) (length coords))
+        (let* ((new-dims (map gen-new-dims coords dimensions))
+               (dims (build-dimension new-dims dimensions))
+               (new-var (add-element
+                         'dimensions
+                         (filter (lambda (x)
+                                   (> (vector-length (get-value x)) 1))
+                                 dims)
+                         (add-element 'data
+                                      (slice-dimension new-dims variable)
+                                      (add-element 'shape
+                                                   (map vector-length
+                                                        (get-values dims))
+                                                   new-var))))
+               (new-single-dims (filter (lambda (x)
+                                          (< (vector-length (get-value x)) 2))
+                                        dims)))
+          (add-element 'single-dimensions
+                       (append new-single-dims single-dims)
+                       new-var))
+        (error "supplied dimension of coords do not match dim. of data"
+               (list coords (length dimensions)))))
+
+  ;; internal func
+  (define (slice-dimension new-dims variable)
+    (let* ((idxs (map cadr new-dims))
+           (data (get 'data variable))
+           (shape (get 'shape variable))
+           (new-shape (map length idxs))
+           (new-length (apply * new-shape))
+           (new-vec (make-vector new-length nan)))
+      (let loop-idx ((i 0)
+                     (index-list idxs)
+                     (loop-list idxs)
+                     (indices '()))
+        (if (fix:= i new-length)
+            new-vec
+            (if (null? loop-list)
+                (let ((adv-idx (advance-index-list index-list)))
+                  (vector-set! new-vec i
+                               (vector-ref data (calc-index indices shape)))
+                  (loop-idx (fix:+ i 1) adv-idx adv-idx '()))
+                (loop-idx i index-list (cdr loop-list)
+                          (append indices (list (car (car loop-list)))))))))
+
+    (define (calc-index index-list shape)
+      (let ((rev-index (reverse index-list))
+            (rev-shape (reverse shape)))
+        (fix:+ (car rev-index)
+               (let loop ((index (cdr rev-index))
+                          (shape rev-shape)
+                          (mult 1))
+                 (if (null? index)
+                     0
+                     (fix:+
+                      (fix:* (car index) (fix:* mult (car shape)))
+                      (loop (cdr index)
+                            (cdr shape)
+                            (fix:* mult (car shape)))))))))
+
+    (define (advance-index-list old-idxs)
+      (let ((reverse-idx (reverse old-idxs)))
+        (let ((advanced-index
+               (cons (cdr (car reverse-idx))
+                     (cdr reverse-idx))))
+          (reverse
+           (let loop ((new-index advanced-index)
+                      (orig-index (reverse idxs)))
+             (if (null? (cdr new-index))
+                 new-index              ;'()
+                 (let ((first (car new-index))
+                       (second (cadr new-index)))
+                   (if (null? first)
+                       ;; reset first and advance second
+                       (cons (car orig-index)
+                             (loop (cons (cdr second) (cddr new-index))
+                                   (cdr orig-index)))
+                       ;; else, advance loop
+                       (cons first (loop (cdr new-index)
+                                         (cdr orig-index))))))))))))
+  (define (build-dimension new-dims dimensions)
+    ;; new-dims is a list of 2-element lists, frist vec of dims dims,
+    ;; second list of indexes
+    ;; dimensions is an alist of key, value pairs
+    ;; outputs new alist of key, new dimensions pairs
+    (let ((dim-keys (get-keys dimensions))
+          (new-vectors (map car new-dims)))
+      (map pair dim-keys new-vectors)))
+
+  (define (gen-new-dims val dimension)
+    ;; takes a list of coordinates (do not need to be exact
+    ;; outputs a list two elements: vector of exact coordinates,
+    ;; and index of list
+    (let ((vec (get-value dimension)))
+      (cond ((pair? val) (slice-vector val vec))
+            ((equal? val 'all) (list vec (list-tabulate (vector-length vec)
+                                                        (lambda (x) x))))
+            ;; should modify below so idx in list
+            ((number? val) (select-coords val vec)) 
+            (else (error "invalid slice"))))
+    (define (slice-vector val vec)
+      ;; assumes list numeric and sorted small to large,
+      ;; finds closest value in lis to val
+      (if (not (pair? val)) (error "slice should be defined by pair" val))
+      (let ((length (vector-length vec))
+            (min-val (car val))
+            (max-val (cdr val)))
+        (let loop ((i 0)
+                   (idx-list '())
+                   (val-list '()))
+          (if  (fix:= length i)
+               (list (list->vector val-list) idx-list)
+               (let ((current-val (vector-ref vec i)))
+                 (if (and (>= current-val min-val) (<= current-val max-val))
+                     (loop (fix:+ i 1)
+                           (append idx-list (list i))
+                           (append val-list (list current-val)))
+                     (loop (fix:+ i 1) idx-list val-list)))))))
+    (define (select-coords val vec)
+      ;; assumes list numeric and sorted small to large,
+      ;; finds closest value in lis to val
+      (define (between? value compare1 compare2)
+        (or (and (>= value compare1) (<= value compare2))
+            (and (<= value compare1) (>= value compare2))))
+      (let ((length (vector-length vec)))
+        (let loop ((i 0))
+          (if (fix:= (fix:- length 1) i)
+              (error "val not between any dimensions"
+                     (list val
+                           (vector-ref vec 0)
+                           (vector-ref vec (fix:- length 1))))
+              (let ((cur-val (vector-ref vec i))
+                    (next-val (vector-ref vec (fix:+ i 1))))
+                (if (between? val cur-val next-val)
+                    (if (< (abs (- val cur-val))
+                           (abs (- val next-val)))
+                        (list (vector cur-val)
+                              (list i))
+                        (list (vector next-val)
+                              (list (fix:+ i 1))))
+                    (loop (fix:+ i 1))))))))))
+
+;;; internal access/creators
+(define (pair key value)
+  (if (not (list? value))
+      (cons key (list value))
+      (cons key value)))
+
+(define (add-element key value structure)
+  (cons (pair key value) structure))
+
 (define (get-list key structure)
   ;; differs from above in that gaurantees to send a list
-  ;; e.g. if you need it for map
+  ;; e.g. if you need it for map on length = 1 elements
   (let ((value (assoc key structure)))
     (if value
         (cdr value)
         (error "key not in structure" (list key (map get-key structure))))))
 
-;;;; General C-lib functions
-;; below lifted from x11-base.scm
-(define (->cstring string)
-  (cond ((and (integer? string) (zero? string))
-	 0)
-	((bytevector? string)
-	 (if (let ((end (bytevector-length string)))
-	       (let loop ((i 0))
-		 (if (fix:< i end)
-		     (or (fix:zero? (bytevector-u8-ref string i))
-			 (loop (fix:1+ i)))
-		     #f)))
-	     string
-	     (error "C string not null terminated:" string)))
-	((string? string)
-	 ;; String->iso8859-1 would be incorrect; it does not null terminate.
-	 (let* ((end (string-length string))
-		(result (make-bytevector (fix:1+ end))))
-	   (do ((i 0 (fix:1+ i)))
-	       ((not (fix:< i end))
-		(bytevector-u8-set! result i #x00))
-	     (bytevector-u8-set! result i (char->integer
-					   (string-ref string i))))
-	   result))
-	(else
-	 (error:wrong-type-argument string "a string or 0" '->cstring))))
+(define (get-keys structure)
+  (map get-key structure))
 
+(define (get-values structure)
+  (map (lambda (key) (get key structure)) (get-keys structure)))
 
-;; file-level c fucntions
-(define (load-ncid filename)
-  (let* ((alien-ncid (malloc (c-sizeof "int") 'int))
-         (out (C-call "nc_open" (->cstring filename) 0 alien-ncid)))
-    (cond ((= 0 out) (newline) (display "loading ncid sucessful"))
-          ((= -61 out) (error "not enough memory" filename))
-          ((= -101 out) (error "Error at HDF5 layer" filename))
-          ((= -106 out) (error "Problem with dimension metadata" filename))
-          ((alien-null? alien-ncid)
-           (error "could't open file-unspecified reason" filename))
-          (else (display "WARNING: unspecified response: ") (display out)))
-    (C-> alien-ncid "int")))
+(define (get-key a-element)
+  (car a-element))
 
+(define (get-value a-element)
+  (cadr a-element))
+
+(define (alist->list structure)
+  (map (lambda (x) (get-value x)) structure))
+
+(define (key-exists? key structure)
+  (assoc key structure))
+
+(define (var-exists? ncid var-name)
+  (let* ((alien-varid (malloc (c-sizeof "int") 'int))
+         (out (C-call "nc_inq_varid" ncid (->cstring var-name) alien-varid)))
+    (cond ((= -33 out) (error "Bad netcdf id on test-var" ncid))
+          ((= 0 out) #t)
+          (else #f))))
+
+(define (and-list x)
+  ;; returns true if every element of list is #t
+  (if (null? x)
+      #t
+      (if (car x)
+          (and-list (cdr x))
+          #f)))
+
+;; load functions
 (define (close-ncid metadata)
   ;; this is dangerous, introduces state, :(, run when done w/ file
   (let* ((ncid (get 'ncid metadata))
@@ -165,6 +520,34 @@
           ((= -116 out) (error "Bad group ID." ncid))
           (else (error "unspecified response")))
     #f))
+
+
+;; alien/c functions and converters
+(define (->cstring string)
+  ;; lifted from x11-base.scm
+  (cond ((and (integer? string) (zero? string))
+         0)
+        ((bytevector? string)
+         (if (let ((end (bytevector-length string)))
+               (let loop ((i 0))
+                 (if (fix:< i end)
+                     (or (fix:zero? (bytevector-u8-ref string i))
+                         (loop (fix:1+ i)))
+                     #f)))
+             string
+             (error "C string not null terminated:" string)))
+        ((string? string)
+         ;; String->iso8859-1 would be incorrect; it does not null terminate.
+         (let* ((end (string-length string))
+                (result (make-bytevector (fix:1+ end))))
+           (do ((i 0 (fix:1+ i)))
+               ((not (fix:< i end))
+                (bytevector-u8-set! result i #x00))
+             (bytevector-u8-set! result i (char->integer
+                                           (string-ref string i))))
+           result))
+        (else
+         (error:wrong-type-argument string "a string or 0" '->cstring))))
 
 (define (alien->vector alien nelements type process)
   ;; convert alien array to vector of lenth D*D*D...
@@ -204,294 +587,28 @@
   (let ((type (c-> alien "int")))
     (cdr (assoc type +type-conv-key+))))
 
-;;;; variable-level c functions
-(define (load-varid metadata var-name)
-  (let* ((alien-varid (malloc (c-sizeof "int") 'int))
-         (ncid (get 'ncid metadata))
-         (out (C-call "nc_inq_varid" ncid (->cstring var-name) alien-varid)))
-    (cond ((= 0 out) (newline) (display "loading varid sucessful"))
-          ((= -33 out) (error "Not a netcdf id." ncid))
-          ((alien-null? alien-varid)
-           (error "could't open file-unspecified reason" ncid))
-          (else (error "unspecified response")))
-    (C-> alien-varid "int")))
-
-(define (load-var-meta metadata varname)
-  (let* ((ncid (get 'ncid metadata))
-         (varid (load-varid metadata varname))
-         (alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
-         (alien-xtype (malloc (c-sizeof "int") 'nc_type))
-         (alien-ndims (malloc (c-sizeof "int") 'int))
-         ;; below max 10 dims, but should really call to get ndims first
-         (alien-dimids (malloc (* 10 (c-sizeof "int")) 'int))
-         (alien-natts (malloc (c-sizeof "int") 'int))
-         (out (c-call "nc_inq_var" ncid varid alien-name
-                      alien-xtype alien-ndims alien-dimids
-                      alien-natts)))
-    (cond ((= 0 out)) ;(newline) (display "loading var sucessful")
-          ((= -49 out) (error "Variable not found" varid))
-          ((= -33 out) (error "Not a netcdf id" varid))
-          ((alien-null? alien-ndims)
-           (error "could't load var- unspecified reason" varid))
-          (else (error "unspecified response")))
-    (let* ((var-meta
-            (make-dim-meta
-             (make-var-structure
-              metadata varid alien-name alien-xtype
-              alien-ndims alien-dimids alien-natts)))
-           (att-names (load-att-names var-meta)))
-      ;; add atts to var-meta,
-      ;; and return the metadata structure
-      (add-element 'atts
-                   (map (lambda (name)
-                          (load-att var-meta name))
-                        att-names)
-                   var-meta))))
-
-(define (make-var-structure metadata varid alien-name alien-xtype alien-ndims
-                            alien-dimids alien-natts)
-  (let ((ndims (c-> alien-ndims "int") ))
-    `((filename . (,(get 'filename metadata)))
-      (ncid . (,(get 'ncid metadata)))
-      (name . (,(alien->string alien-name)))
-      (varid . (,varid))
-      (xtype . (,(alien->type alien-xtype)))
-      (ndims . (,ndims))
-      (dimids . ,(alien->list alien-dimids ndims "int"))
-      (natts . (,(c-> alien-natts "int"))))))
-
-(define (make-var-data meta name #!optional post-processing)
-  
-  (let* ((var-meta (load-var-meta meta name))
-         (var-data (load-var-data var-meta))
-         (post-processing (if (default-object? post-processing)
-                              add-dims
-                              post-processing)))
-    (post-processing (list (pair 'data var-data)
-                           (pair 'meta var-meta)
-                           (pair 'shape (alist->list
-                                         (get-list 'dims var-meta)))))))
-
-(define (load-var-data var-meta)
-  (let* ((ncid (get 'ncid var-meta))
-         (varid (get 'varid var-meta))
-         (nelements (apply * (alist->list (get-list 'dims var-meta))))
-         (type (get 'xtype var-meta))
-         (alien-var (malloc (* nelements (get-c-sizeof type))
-                            (string->symbol type)))
-         (out (c-call "nc_get_var" ncid varid alien-var)))
-    (cond ((= 0 out)) ; (newline) (display "loading var sucessful")
-          ((= -49 out) (error "Variable not found" varid))
-          ((= -60 out) (error "Math result not representable" varid))
-          ((= -39 out) (error "Operation not allowed in define mode" varid))
-          ((= -33 out) (error "Not a netcdf id" varid))
-          ((alien-null? alien-ncid)
-           (error "could't load var- unspecified reason" varid))
-          (else (error "unspecified response")))
-    (alien->vector alien-var nelements type (build-processor var-meta))))
-
-(define (build-processor var-meta)
-  ;;; makes a function for converted stored values to float,
-  ;;; i.e. if we have scale factors and offsets, etc.
-  (let* ((attrs (get 'atts var-meta))
-         (fillv (if (assoc "_FillValue" attrs)
-                    (get "_FillValue" attrs)
-                    (begin (newline) (display "WARNING - no fill value") nan)))
-         (offset (if (assoc "add_offset" attrs)
-                     (get "add_offset" attrs)
-                     0))
-         (scale (if (assoc "scale_factor" attrs)
-                     (get "scale_factor" attrs)
-                     1))
-         (valid_range (if (assoc "valid_range" attrs)
-                          (get "valid_range" attrs)
-                          (list inf- inf+)))
-         (min (car valid_range))
-         (max (cadr valid_range)))
-    (lambda (element)
-      (if (eqv? element fillv)
-          nan
-          (let ((value (+ offset (* element scale))))
-            (if (or (< value min) (> value max))
-                nan ;;(error "value out of expected range")
-                value))))))
-
-(define (add-element key value structure)
-  (cons (pair key value) structure))
-
-(define (key-exists? key structure)
-  (assoc key structure))
-
-(define (alist->list structure)
-  (map (lambda (x) (get-value x)) structure))
-
-(define (get-keys structure)
-  (map get-key structure))
-
-(define (get-values structure)
-  (map (lambda (key) (get key structure)) (get-keys structure)))
-
-;;;; dimension functions
-(define (make-dim-meta var-meta)
-  (if (key-exists? 'dims var-meta)
-      (error "Called make-dim-meta but dims already exists" var-meta)
-      (add-element
-       'dims
-       (map (lambda (dimid)
-              (load-dim-meta (get 'ncid var-meta) dimid))
-            (get-list 'dimids var-meta))
-       var-meta)))
-
-(define (load-dim-meta ncid dimid)
-  (let* ((alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
-        (alien-len (malloc (c-sizeof "ulong") '(* size_t)))
-        (out (c-call "nc_inq_dim" ncid dimid alien-name alien-len)))
-    (cond ((= 0 out)) ;(newline) (display "loading var sucessful")
-          ((= -46 out) (error "Bad dim name" dimid))
-          ((= -33 out) (error "Not a netcdf id" ncid))
-          ((alien-null? alien-len)
-           (error "could't load var- unspecified reason" varid))
-          (else (error "unspecified response")))
-    (pair (alien->string alien-name) (c-> alien-len "ulong"))))
 
 ;;;; attribute funtions
-(define (load-att-names var-meta)
-  (map (lambda (attnum)
-         (load-attname (get 'ncid var-meta)
-                       (get 'varid var-meta)
-                       attnum))
-       (list-tabulate (get 'natts var-meta) (lambda (x) x))))
-
-(define (load-att var-meta name)
-  (let* ((ncid (get 'ncid var-meta))
-         (varid (get 'varid var-meta))
-         (xtype (malloc (c-sizeof "int") 'nc_type))
-         (len (malloc (c-sizeof "ulong") 'size_t))
-         (out (c-call "nc_inq_att" ncid varid name xtype len)))
-    (if (not (equal? out 0))
-        (error "failed to load attribute metadata code:" out))
-    (let* ((nelements (c-> len "ulong"))
-           (type (alien->type xtype))
-           (loader
-            (lambda ()
-              (let* ((alien-data (malloc (* nelements
-                                           (get-c-sizeof type))
-                                        (string->symbol type)))
-                     (out (c-call "nc_get_att" ncid
-                                 varid name alien-data)))
-                (if (not (equal? out 0))
-                    (error "failed to load attribute, code: " out)
-                    (if (equal? type "char")
-                        (utf8->string
-                         (list->bytevector
-                          (alien->list alien-data nelements type)))
-                        (alien->list alien-data nelements type)))))))
-      (pair name (loader)))))
-
-(define (load-attname ncid varid attnum)
-  (let* ((alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
-         (out (c-call "nc_inq_attname" ncid varid attnum alien-name)))
-    (cond ((= 0 out)) ;(newline) (display "loading var sucessful")
-          ((= -33 out) (error "Not a netcdf id" ncid))
-          ((= -49 out) (error "Bad varid" varid))
-          ((= -116 out) (error "Bad group id" varid))
-          ;; note there are more error codes, im too lazy to do
-          ;; I should have made a univsersal error-check gen func
-          ((alien-null? alien-name)
-           (error "could't load att-name - unspecified reason" varid))
-          (else (error "unspecified response")))
-    (alien->string alien-name)))
-
 (define +type-conv-key+ '((0 . "not a type") (1 . "byte") (2 . "char")
-                        (3 . "short") (4 . "int") (5 . "float")
-                        (6 . "double") (7 . "ubyte") (8 . "ushort")
-                        (9 . "uint") (10 . "uint64") (11 . "uint64")
-                        (12 . "string")))
+                          (3 . "short") (4 . "int") (5 . "float")
+                          (6 . "double") (7 . "ubyte") (8 . "ushort")
+                          (9 . "uint") (10 . "uint64") (11 . "uint64")
+                          (12 . "string")))
 
-
-;; (define +supported-types+ '("char" "uchar" "short" "ushort"
-;;                             "int" "uint" "long" "ulong" "float" "double"))
-
-;; doesn't let us pass string values, not sure why
-;; (define (gen-peek name)
-;;   (pair name (lambda (x)
-;;                (c-> x "int"))))
-;; (define (gen-advance name)
-;;   (pair name (lambda (x)
-;;                (c-array-loc! x "int" 1))))
-
-;; (define +peek-list+ (map gen-peek +supported-types+))
-;; (define +advance-list+ (map gen-advance +supported-types+))
-
-
-
-(define (and-list x)
-  (if (null? x)
-      #t
-      (if (car x)
-          (and-list (cdr x))
-          #f)))
-
-
-;;;; conversion scripts
-(define (var-exists? ncid var-name)
-  (let* ((alien-varid (malloc (c-sizeof "int") 'int))
-         (out (C-call "nc_inq_varid" ncid (->cstring var-name) alien-varid)))
-    (cond ((= -33 out) (error "Bad netcdf id on test-var" ncid))
-          ((= 0 out) #t)
-          (else #f))))
-
-(define (add-dims variable)
-  (let* ((meta (get 'meta variable))
-         (ncid (get 'ncid meta))
-         (dims (get 'dims meta))
-         (keys (get-keys dims))
-         (vals (alist->list dims))
-         (loaded-dims
-          (if (and-list (map (lambda (key)
-                               (var-exists? ncid key))
-                             keys))
-              (map (lambda (key)
-                     (pair key (make-var-data
-                                meta key (lambda (var) (get 'data var)))))
-                   keys)
-              (begin (newline) (display "No dimesion data for ")
-                     (display (get 'name meta))
-                     (display ", adding int index")
-                     (map (lambda (key val)
-                            (pair key
-                                  (list->vector
-                                   (list-tabulate val (lambda (x) x)))))
-                          keys vals))))
-         (dimensions (filter (lambda (x)
-                               (if (> (vector-length (get-value x)) 1) #t #f))
-                             loaded-dims))
-         (single-dimensions (filter (lambda (x)
-                               (if (< (vector-length (get-value x)) 2) #t #f))
-                        loaded-dims)))
-    (add-element 'single-dimensions
-                 single-dimensions
-                 (add-element 'dimensions
-                              dimensions
-                              variable))))
-
-(define (get-key a-element)
-  (car a-element))
-(define (get-value a-element)
-  (cadr a-element))
-
-
-;;; below for getting whatever type is in file
-;;; note alternatively we could just load everything as float
+;; c function accessors
 (define (get-peek type)
+  ;; returns c-peek function from type str
   (cdr (assoc type +peek-list+)))
 
 (define (get-advance type)
+  ;; returns c-advance-array-loc func from type str
   (cdr (assoc type +advance-list+)))
 
 (define (get-c-sizeof type)
+  ;; returns c-size of from type str
   (cdr (assoc type +size-list+)))
 
+;;; constants
 (define +peek-list+ `(("char" . ,(lambda (x) (c-> x "char")))
                       ("uchar" . ,(lambda (x) (c-> x "uchar")))
                       ("short" . ,(lambda (x) (c-> x "short")))
@@ -526,200 +643,21 @@
                       ("float" . ,(c-sizeof "float"))
                       ("double" . ,(c-sizeof "double"))))
 
+;;; Useful IEEE defined values
+(define (zero)
+  (identity-procedure 0.))
 
-;; accepts a list of exact coords and idices
-(define (calc-index index-list shape)
-  (let ((rev-index (reverse index-list))
-        (rev-shape (reverse shape)))
-    (fix:+ (car rev-index)
-       (let loop ((index (cdr rev-index))
-                  (shape rev-shape)
-                  (mult 1))
-         (if (null? index)
-             0
-             (fix:+
-              (fix:* (car index) (fix:* mult (car shape)))
-              (loop (cdr index) (cdr shape) (fix:* mult (car shape)))))))))
+(define nan
+  (flo:with-exceptions-untrapped (flo:exception:invalid-operation)
+                                 (lambda ()
+                                   (flo:/ (zero) (zero)))))
 
+(define inf+
+  (flo:with-exceptions-untrapped (flo:exception:divide-by-zero)
+                                 (lambda ()
+                                   (flo:/ +1. (zero)))))
 
-
-(define (find-nearest val vec)
-  ;; assumes list numeric and sorted small to large,
-  ;; finds closest value in lis to val
-  (if (< val (vector-ref vec 0))
-      (error "val smaller than range of list"
-             (list val (vector-ref vec))))
-  (let ((length (vector-length vec)))
-    (let loop ((i 0))
-      (cond ((fix:= length i) (error "val larger than range of list"
-                                     (list val (vector-ref vec
-                                                           (fix:- length 1)))))
-            ((< val (vector-ref vec (fix:+ i 1)))
-             (if (< (abs (- val (vector-ref vec i)))
-                    (abs (- val (vector-ref vec (fix:+ i 1)))))
-                 (list (vector-ref vec i) (list i))
-                 (list (vector-ref vec (fix:+ i 1)) (list (fix:+ i 1)))))
-            (else (loop (fix:+ i 1)))))))
-
-(define (select-coords val vec)
-  ;; assumes list numeric and sorted small to large,
-  ;; finds closest value in lis to val
-  (define (between? value compare1 compare2)
-    (or (and (>= value compare1) (<= value compare2))
-        (and (<= value compare1) (>= value compare2))))
-  (let ((length (vector-length vec)))
-    (let loop ((i 0))
-      (if (fix:= (fix:- length 1) i)
-          (error "val not between any dimensions"
-                 (list val
-                       (vector-ref vec 0)
-                       (vector-ref vec (fix:- length 1))))
-          (let ((cur-val (vector-ref vec i))
-                (next-val (vector-ref vec (fix:+ i 1))))
-            (if (between? val cur-val next-val)
-                (if (< (abs (- val cur-val))
-                       (abs (- val next-val)))
-                    (list (vector cur-val)
-                          (list i))
-                    (list (vector next-val)
-                          (list (fix:+ i 1))))
-                (loop (fix:+ i 1))))))))
-
-(define (slice-vector val vec)
-  ;; assumes list numeric and sorted small to large,
-  ;; finds closest value in lis to val
-  (if (not (pair? val)) (error "slice should be defined by pair" val))
-  (let ((length (vector-length vec))
-        (min-val (car val))
-        (max-val (cdr val)))
-    (let loop ((i 0)
-               (idx-list '())
-               (val-list '()))
-      (if  (fix:= length i)
-           (list (list->vector val-list) idx-list)
-           (let ((current-val (vector-ref vec i)))
-             (if (and (>= current-val min-val) (<= current-val max-val))
-                 (loop (fix:+ i 1)
-                       (append idx-list (list i))
-                       (append val-list (list current-val)))
-                 (loop (fix:+ i 1) idx-list val-list)))))))
-
-(define (gen-new-dims val dimension)
-  ;; takes a list of coordinates (do not need to be exact
-  ;; outputs a list two elements: vector of exact coordinates, and index of list
-  (let ((vec (get-value dimension)))
-    (cond ((pair? val) (slice-vector val vec))
-          ((equal? val 'all) (list vec (list-tabulate (vector-length vec)
-                                                      (lambda (x) x))))
-          ((number? val) (select-coords val vec)); should modify so idx in list
-          (else (error "invalid slice")))))
-
-
-(define (calc-index index-list shape)
-  (let ((rev-index (reverse index-list))
-        (rev-shape (reverse shape)))
-    (fix:+ (car rev-index)
-       (let loop ((index (cdr rev-index))
-                  (shape rev-shape)
-                  (mult 1))
-         (if (null? index)
-             0
-             (fix:+
-              (fix:* (car index) (fix:* mult (car shape)))
-              (loop (cdr index) (cdr shape) (fix:* mult (car shape)))))))))
-
-(define (build-dimension new-dims dimensions)
-    ;; new-dims is a list of 2-element lists, frist vec of dims dims,
-    ;; second list of indexes
-    ;; dimensions is an alist of key, value pairs
-    ;; outputs new alist of key, new dimensions pairs
-    (let ((dim-keys (get-keys dimensions))
-          (new-vectors (map car new-dims)))
-      (map pair dim-keys new-vectors)))
-
-
-(define (slice-dimension new-dims variable)
-  (let* ((idxs (map cadr new-dims))
-         (data (get 'data variable))
-         (shape (get 'shape variable))
-         (new-shape (map length idxs))
-         (new-length (apply * new-shape))
-         (new-vec (make-vector new-length nan)))
-    (define (advance-index-list old-idxs)
-      (let ((reverse-idx (reverse old-idxs)))
-        (let ((advanced-index
-               (cons (cdr (car reverse-idx))
-                     (cdr reverse-idx))))
-          (reverse
-           (let loop ((new-index advanced-index)
-                      (orig-index (reverse idxs)))
-             (if (null? (cdr new-index))
-                 new-index              ;'()
-                 (let ((first (car new-index))
-                       (second (cadr new-index)))
-                   (if (null? first)
-                       ;; reset first and advance second
-                       (cons (car orig-index)
-                             (loop (cons (cdr second) (cddr new-index))
-                                   (cdr orig-index)))
-                       ;; else, advance loop
-                       (cons first (loop (cdr new-index)
-                                         (cdr orig-index)))))))))))
-    (let loop-idx ((i 0)
-                   (index-list idxs)
-                   (loop-list idxs)
-                   (indices '()))
-      (if (fix:= i new-length)
-          new-vec
-          (if (null? loop-list)
-              (let ((adv-idx (advance-index-list index-list)))
-                (vector-set! new-vec i
-                             (vector-ref data (calc-index indices shape)))
-                (loop-idx (fix:+ i 1) adv-idx adv-idx '()))
-              (loop-idx i index-list (cdr loop-list)
-                        (append indices (list (car (car loop-list))))))))))
-
-(define (index coords variable)
-  ;; return data element closes to the given coords
-  ;; from the labelled data structure
-  (let ((data (get 'data variable))
-        (dimensions (get-list 'dimensions variable))
-        (single-dims (get-list 'single-dimensions variable))
-        (new-var (del-assoc
-                  'dimensions
-                  (del-assoc 'data
-                             (del-assoc 'single-dimensions
-                                        (del-assoc 'shape variable))))))
-    (if (= (length dimensions) (length coords))
-        (let* ((new-dims (map gen-new-dims coords dimensions))
-               (dims (build-dimension new-dims dimensions))
-               (new-var (add-element
-                         'dimensions
-                         (filter (lambda (x)
-                                   (> (vector-length (get-value x)) 1))
-                                 dims)
-                         (add-element 'data
-                                      (slice-dimension new-dims variable)
-                                      (add-element 'shape
-                                                   (map vector-length
-                                                        (get-values dims))
-                                                   new-var))))
-               (new-single-dims (filter (lambda (x)
-                                  (< (vector-length (get-value x)) 2))
-                                dims)))
-          (add-element 'single-dimensions
-                       (append new-single-dims single-dims)
-                       new-var))
-        (error "supplied dimension of coords do not match dim. of data"
-               (list coords (length dimensions))))))
-
-;; (pp (let loop ((n 1))
-;;       (if (fix:fixnum? n)
-;;           (loop (* n 2))
-;;           (- n 1))))
-(define data
-  (let* ((metadata (make-meta
-                    "./testing/simple_xy_nc4.nc"))
-         (variable (make-var-data metadata "data")))
-    variable))
-
+(define inf-
+  (flo:with-exceptions-untrapped (flo:exception:divide-by-zero)
+                                 (lambda ()
+                                   (flo:/ -1. (zero)))))

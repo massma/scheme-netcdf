@@ -8,9 +8,12 @@
 
 (cd "./testing")
 
-(define nc-filename "./simple_xy_nc4.nc")
-(run-shell-command "make gen-version.exe")
-(run-shell-command "make simple_xy_nc4.nc")
+(parameterize ((working-directory-pathname "./testing"))
+  (run-shell-command "make gen-version.exe")
+  (run-shell-command "make simple_xy_nc4.nc"))
+
+
+(define nc-filename "./testing/simple_xy_nc4.nc")
 
 ;; test version
 (define-test (version)
