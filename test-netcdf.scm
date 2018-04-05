@@ -1,12 +1,11 @@
 (cd "/home/adam/software/netcdf")
+(load "install-netcdf")
 (load-option 'ffi)
 (C-include "netcdf")
 (cf "netcdf")
-;; (load "install-netcdf")
 (load "netcdf")
 (load "./test-manager/load")
 
-(cd "./testing")
 
 (parameterize ((working-directory-pathname "./testing"))
   (run-shell-command "make gen-version.exe")

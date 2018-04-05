@@ -21,6 +21,7 @@
 (load-option 'ffi)
 
 (load-option 'synchronous-subprocess)
+
 (with-working-directory-pathname
  (directory-pathname (current-load-pathname)) ; (pwd) - if from repl
  (lambda ()
@@ -33,4 +34,3 @@
          (error "netcdf build failed:" status)))))
 
 
-(load "test-netcdf")
