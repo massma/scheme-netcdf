@@ -1,15 +1,17 @@
-(cd "/home/adam/software/netcdf")
-(load "install-netcdf")
+;; (cd "/home/adam/software/netcdf")
+;; (load "install-netcdf")
 (load-option 'ffi)
-(C-include "netcdf")
+(c-generate "netcdf" "#include <netcdf.h>")
+(load-option 'ffi)
+(c-include "netcdf")
 (cf "netcdf")
 (load "netcdf")
-(load "./test-manager/load")
+(load "test-manager/load")
 
-(parameterize ((working-directory-pathname "./testing"))
-  (run-shell-command "make gen-version.exe")
-  (run-shell-command "make simple_xy_nc4.nc"))
-
+(with-working-directory-pathname
+ "testing" (lambda ()
+             (run-shell-command "make gen-version.exe")
+             (run-shell-command "make simple_xy_nc4.nc")))
 
 (define nc-filename "./testing/simple_xy_nc4.nc")
 
@@ -17,7 +19,7 @@
 (define-test (version)
   (assert-equal (let* ((alien (make-alien
                                '(* char))))
-                  (C-call "nc_inq_libvers" alien)
+                  (c-call "nc_inq_libvers" alien)
                   (let ((new (c-peek-cstring alien)))
                     (if (alien-null? alien)
                         (error "Could not open-file."))

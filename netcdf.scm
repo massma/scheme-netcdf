@@ -19,7 +19,7 @@
 
 (declare (usual-integrations))
 (load-option 'ffi)
-(C-include "netcdf")
+(c-include "netcdf")
 
 
 ;;; Below are functions designed to be used by user
