@@ -6,7 +6,6 @@
 (load "netcdf")
 (load "./test-manager/load")
 
-
 (parameterize ((working-directory-pathname "./testing"))
   (run-shell-command "make gen-version.exe")
   (run-shell-command "make simple_xy_nc4.nc"))
