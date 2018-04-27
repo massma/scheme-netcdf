@@ -1,8 +1,6 @@
 ;; (cd "/home/adam/software/netcdf")
 ;; (load "install-netcdf")
 (load-option 'ffi)
-(c-generate "netcdf" "#include <netcdf.h>")
-(load-option 'ffi)
 (c-include "netcdf")
 (cf "netcdf")
 (load "netcdf")
