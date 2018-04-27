@@ -18,7 +18,7 @@ netcdf-shim.o: netcdf-shim.c
 	| mit-scheme --batch-mode -- -c $<
 
 netcdf-shim.c netcdf-const.c netcdf-types.bin: netcdf.cdecl
-	echo '(generate-shim "netcdf" "#include <netcdf.h>")' \
+	echo '(generate-shim "netcdf" "#include \"netcdf.h\"")' \
 	| mit-scheme --batch-mode
 
 netcdf-const.bin: netcdf-const.scm

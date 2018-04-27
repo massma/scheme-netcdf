@@ -37,14 +37,15 @@
   (define (string-joiner infix char)
     ;; function for stable branch compatability, can be deleted on next version
     ;; or switch to dev branch delimter, copy and boolean are dummy args
-    (define (joiner list)
+    (define (joiner . list)
       (if (null? list)
           ""
-          (string-append (car list) char (joiner (cdr list)))))
+          (string-append (car list) char (apply joiner (cdr list)))))
     joiner)
   (define (load-ncid filename)
     (let* ((alien-ncid (malloc (c-sizeof "int") 'int))
            (out (C-call "nc_open" (->cstring filename) 0 alien-ncid)))
+      (display (->cstring filename))
       (cond ((= 0 out) (newline) (display "loading ncid sucessful"))
             ((= -61 out) (error "not enough memory" filename))
             ((= -101 out) (error "Error at HDF5 layer" filename))
@@ -543,28 +544,22 @@
   ;; lifted from x11-base.scm
   (cond ((and (integer? string) (zero? string))
          0)
-        ((bytevector? string)
-         (if (let ((end (bytevector-length string)))
-               (let loop ((i 0))
-                 (if (fix:< i end)
-                     (or (fix:zero? (bytevector-u8-ref string i))
-                         (loop (fix:1+ i)))
-                     #f)))
-             string
-             (error "C string not null terminated:" string)))
         ((string? string)
          ;; String->iso8859-1 would be incorrect; it does not null terminate.
          (let* ((end (string-length string))
-                (result (make-bytevector (fix:1+ end))))
+                (result (make-vector-8b (fix:1+ end))))
            (do ((i 0 (fix:1+ i)))
                ((not (fix:< i end))
-                (bytevector-u8-set! result i #x00))
-             (bytevector-u8-set! result i (char->integer
-                                           (string-ref string i))))
+                (vector-8b-set! result i 0))
+             (vector-8b-set! result i (char->integer
+                                       (string-ref string i))))
            result))
         (else
-         (error:wrong-type-argument string "a string or 0" '->cstring))))
-
+         (error:wrong-type-argument string "a string or 0" '->cstring)))
+  )
+(display (->cstring nc-filename))
+(string-length nc-filename)
+(string-length (->cstring nc-filename))
 (define (alien->vector alien nelements type process)
   ;; convert alien array to vector of lenth D*D*D...
   (let ((vec (make-vector nelements nan))
@@ -659,6 +654,8 @@
                       ("float" . ,(c-sizeof "float"))
                       ("double" . ,(c-sizeof "double"))))
 
+
+
 ;;; Useful IEEE defined values
 (define (zero)
   (identity-procedure 0.))
@@ -678,3 +675,22 @@
                                  (lambda ()
                                    (flo:/ -1. (zero)))))
 
+(define nc-filename "./testing/simple_xy_nc4.nc")
+(make-meta nc-filename)
+
+(->cstring nc-filename)
+
+(let* ((alien (make-alien
+                               '(* char))))
+                  (c-call "nc_inq_libvers" alien)
+                  (let ((new (c-peek-cstring alien)))
+                    (if (alien-null? alien)
+                        (error "Could not open-file."))
+                    (if (string? new)
+                        new
+                        (utf8->string new))))
+
+(call-with-output-string (lambda (port)
+                           (run-shell-command
+                            "./testing/gen-version.exe"
+                            'output port)))
