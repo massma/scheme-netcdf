@@ -1,11 +1,17 @@
-LDFLAGS=-L/home/adam/.guix-profile/lib -lnetcdf -lhdf5 -fPIC
+LDFLAGS=-L$(HOME)/.guix-profile/lib -lnetcdf -lhdf5 -fPIC
 
-install: build
-	echo '(install-shim "$(DESTDIR)" "netcdf")' \
-	| mit-scheme --batch-mode
+# install: build
+# 	echo '(install-shim "$(DESTDIR)" "netcdf")' \
+# 	| mit-scheme --batch-mode
 
 clean:
 	rm netcdf-const* netcdf-types* netcdf-shim* 
+
+check : netcdf-shim.so netcdf-types.bin netcdf-const.bin
+	echo '(load "test-netcdf.scm")' \
+	| mit-scheme --batch-mode --library \
+	$(HOME)/.guix-profile/lib/mit-scheme-x86-64:$(HOME)/software/netcdf \
+	--band all.com
 
 build: netcdf-shim.so netcdf-types.bin netcdf-const.bin
 

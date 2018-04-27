@@ -45,7 +45,6 @@
   (define (load-ncid filename)
     (let* ((alien-ncid (malloc (c-sizeof "int") 'int))
            (out (C-call "nc_open" (->cstring filename) 0 alien-ncid)))
-      (display (->cstring filename))
       (cond ((= 0 out) (newline) (display "loading ncid sucessful"))
             ((= -61 out) (error "not enough memory" filename))
             ((= -101 out) (error "Error at HDF5 layer" filename))
@@ -555,11 +554,8 @@
                                        (string-ref string i))))
            result))
         (else
-         (error:wrong-type-argument string "a string or 0" '->cstring)))
-  )
-(display (->cstring nc-filename))
-(string-length nc-filename)
-(string-length (->cstring nc-filename))
+         (error:wrong-type-argument string "a string or 0" '->cstring))))
+
 (define (alien->vector alien nelements type process)
   ;; convert alien array to vector of lenth D*D*D...
   (let ((vec (make-vector nelements nan))
@@ -675,22 +671,3 @@
                                  (lambda ()
                                    (flo:/ -1. (zero)))))
 
-(define nc-filename "./testing/simple_xy_nc4.nc")
-(make-meta nc-filename)
-
-(->cstring nc-filename)
-
-(let* ((alien (make-alien
-                               '(* char))))
-                  (c-call "nc_inq_libvers" alien)
-                  (let ((new (c-peek-cstring alien)))
-                    (if (alien-null? alien)
-                        (error "Could not open-file."))
-                    (if (string? new)
-                        new
-                        (utf8->string new))))
-
-(call-with-output-string (lambda (port)
-                           (run-shell-command
-                            "./testing/gen-version.exe"
-                            'output port)))
