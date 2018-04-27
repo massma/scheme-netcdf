@@ -5,12 +5,11 @@ Playing around with MIT/GNU Scheme's FFI, with the goal of getting netcdf functi
 ### Requisites ###
 
 1. netcdf libraries installed (I'm using version 4.4.1). The script looks in the usual places for headers and shared objects (`usr/include` `/usr/lib/x86_64-linux-gnu` ).
-2. [development version of mit-scheme](http://git.savannah.gnu.org/cgit/mit-scheme.git/) (note this might be important, I think the FFI interface is still in development with updates since the stable version 9.2). Currently I'm working on commit [9ff7e8e8ce9215c1ba5d5ccfb1bba0939ab3f396](http://git.savannah.gnu.org/cgit/mit-scheme.git/commit/?id=9ff7e8e8ce9215c1ba5d5ccfb1bba0939ab3f396) .
-3. set an environmental variable "MITSCHEME_ROOT" which points to the top level of your scheme (i.e. where `src/` `lib/` `bin/` etc. directories are).
+2. MIT/GNU Scheme Version 9.2
 
 ### Instructions ###
 
-load  "install-netcdf.scm" into scheme, and it should build and run a couple of simple tests (defined in test-netcdf.scm). You can also run the tests by going to the "testing" directory and running `make test`.
+Run "make build" to build and "make check" to do a crude test of the package. Note that everything *should* just work if you installed MIT/GNU Scheme, GCC, and netcdf through GNU Guix. If you dont use Guix as your package manual, you will have to tweak the Makefile but that shouldn't be too bad. Autotools might be added at some point, we'll see. 
 
 ### Sample usage ###
 

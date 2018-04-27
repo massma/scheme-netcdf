@@ -1,6 +1,5 @@
 ;; (cd "/home/adam/software/netcdf")
 ;; (load "install-netcdf")
-(cd "/home/adam/software/netcdf")
 (load-option 'ffi)
 (c-include "netcdf")
 (cf "netcdf")
@@ -101,5 +100,5 @@
 
 
 (run-registered-tests)
-(cd "../")
+
 
