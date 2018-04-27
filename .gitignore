@@ -10,3 +10,5 @@
 *.o
 *.png
 *~
+*#*#
+test-netcdf-error.scm
