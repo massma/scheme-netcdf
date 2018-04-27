@@ -10,7 +10,7 @@ clean:
 check : netcdf-shim.so netcdf-types.bin netcdf-const.bin
 	echo '(load "test-netcdf.scm")' \
 	| mit-scheme --batch-mode --library \
-	$(HOME)/.guix-profile/lib/mit-scheme-x86-64:$(HOME)/software/netcdf \
+	$(HOME)/.guix-profile/lib/mit-scheme-x86-64:$(PWD) \
 	--band all.com
 
 build: netcdf-shim.so netcdf-types.bin netcdf-const.bin
