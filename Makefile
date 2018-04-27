@@ -1,3 +1,5 @@
+LDFLAGS=-L/home/adam/.guix-profile/lib -lnetcdf -lhdf5 -fPIC
+
 install: build
 	echo '(install-shim "$(DESTDIR)" "netcdf")' \
 	| mit-scheme --batch-mode
@@ -9,7 +11,7 @@ build: netcdf-shim.so netcdf-types.bin netcdf-const.bin
 
 netcdf-shim.so: netcdf-shim.o
 	echo "(link-shim)" \
-	| mit-scheme --batch-mode -- -o $@ $^ -L/home/adam/.guix-profile/lib -lnetcdf -lhdf5 -fPIC
+	| mit-scheme --batch-mode -- -o $@ $^ $(LDFLAGS)
 
 netcdf-shim.o: netcdf-shim.c
 	echo '(compile-shim)' \
@@ -26,7 +28,7 @@ netcdf-const.scm: netcdf-const
 	./netcdf-const
 
 netcdf-const: netcdf-const.o
-	gcc -o $@ $^ $(LDFLAGS) -L/home/adam/.guix-profile/lib -lnetcdf -lhdf5 -fPIC
+	gcc -o $@ $^ $(LDFLAGS)
 
 netcdf-const.o: netcdf-const.c
 	gcc `pkg-config --cflags netcdf` $(CFLAGS) -o $@ -c $<

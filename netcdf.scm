@@ -24,6 +24,24 @@
 
 ;;; Below are functions designed to be used by user
 (define (make-meta filename)
+  (define (string-splitter delimiter char copy boolean)
+    ;; function for stable branch compatability, can be deleted on next version
+    ;; or switch to dev branch delimter, copy and boolean are dummy args
+    (define (looper string)
+      (let ((index (string-find-next-char string char)))
+        (if index
+            (cons (substring string 0 index)
+                  (looper (string-tail string (+ index 1))))
+            '())))
+    looper)
+  (define (string-joiner infix char)
+    ;; function for stable branch compatability, can be deleted on next version
+    ;; or switch to dev branch delimter, copy and boolean are dummy args
+    (define (joiner list)
+      (if (null? list)
+          ""
+          (string-append (car list) char (joiner (cdr list)))))
+    joiner)
   (define (load-ncid filename)
     (let* ((alien-ncid (malloc (c-sizeof "int") 'int))
            (out (C-call "nc_open" (->cstring filename) 0 alien-ncid)))
