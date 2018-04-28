@@ -2,19 +2,24 @@
 
 Playing around with MIT/GNU Scheme's FFI, with the goal of getting netcdf functionality into mit-scheme.
 
-** Requisites
+** Prerequisites
 
-1. netcdf libraries installed (I'm using version 4.4.1). 
-2. The script assumes gcc is aware of the location of netcdf headers and libraries.
+1. netcdf libraries installed (I'm using version 4.4.1).
+2. The script assumes gcc is aware of the location of netcdf headers and
+   libraries.
 3. MIT/GNU Scheme Version 9.2
 
 ** Build Instructions
 
-Run "make build" to build and "make check" to do a crude test of the
-package. Note that everything /should/ just work if you installed
-MIT/GNU Scheme, gcc, and netcdf through GNU Guix. If you do not use Guix
-as your package manager, you might have to tweak the Makefile but that
-shouldn't be too bad. Autotools might be added at some point, we'll see.
+1. clone repository
+2. ~git submodule init && git submodule update~ :: load Alexey Radul's
+      [[https://github.com/axch/test-manager][test-manager]] for make check.
+3. ~make check~ :: builds package and runs some simple tests.
+
+Note that everything /should/ just work if you installed MIT/GNU Scheme,
+gcc, and netcdf through [[https://www.gnu.org/software/guix/][GNU Guix]]. If you do not use Guix as your package
+manager, you might have to tweak the Makefile but that shouldn't be too
+bad. Autotools might be added at some point, we'll see.
 
 ** Usage 
 More documentation to come, also this is all still in development and
