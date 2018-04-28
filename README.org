@@ -17,15 +17,26 @@ as your package manager, you might have to tweak the Makefile but that
 shouldn't be too bad. Autotools might be added at some point, we'll see.
 
 ** Usage 
+More documentation to come, also this is all still in development and
+likely to change.
 
-More documentation to come, also this is all still in development and likely to change.
+Make sure the repo's directory is in your library path (see --library in
+[[info:mit-scheme-user#Unix%20Installation][documentation]] documentation). To load package just run below:
+
+#+BEGIN_SRC scheme
+  (load-option 'ffi)
+  (c-include "netcdf")
+  (load "netcdf")
+#+END_SRC
+
+*** Basic functions
 
 - ~(make-meta filename)~ :: load metadata from filename (output
      analogous to ~ncdump -h~).
 
-- ~(make-var-data meta varname)~ :: load data variable structure (defined
-by the string ~varname~) from dataset described by meta (loaded with
-~make-meta`.
+- ~(make-var-data meta varname)~ :: load data variable structure
+     (defined by the string ~varname~) from dataset described by meta
+     (loaded with ~make-meta~).
 
 - ~(get-keys structure)~ :: get list of all keys in ~structure~ .
 
@@ -34,16 +45,17 @@ by the string ~varname~) from dataset described by meta (loaded with
 
 - ~(index coords variable)~ :: return a new data variable structure
      indexed by ~coords~. Coords should be list corresponding to the
-     number of dimensions of variable. Each element of the coords list can be a symbol ~'all~
-     (for a slice with all coordinates of that dimension), a pair
-     [~(low . high)~] for a slice of all coordinates between low and
-     high, or a number, which indexed a single coordinate of that
-     dimension. Note that coordinates do not have to be exact. The
-     software will find the nearest coordinate value in the case of a
-     single coordinate, and in the case of a ~(low . high)~ slice will
-     take all coordinate between low and high, inclusive of low and high
-     in the case that that coordinates exist that are equal to low and
-     high. An example might be appropriate, see below.
+     number of dimensions of variable. Each element of the coords list
+     can be a symbol ~'all~ (for a slice with all coordinates of that
+     dimension), a pair [~(low . high)~] for a slice of all coordinates
+     between low and high, or a number, which indexed a single
+     coordinate of that dimension. Note that coordinates do not have to
+     be exact. The software will find the nearest coordinate value in
+     the case of a single coordinate, and in the case of a ~(low
+     . high)~ slice will take all coordinate between low and high,
+     inclusive of low and high in the case that that coordinates exist
+     that are equal to low and high. An example might be appropriate,
+     see below.
 
 ** Index Example
 
@@ -52,7 +64,7 @@ Say we have a data variable structure called ~data~ of 3 dimensions
 
 Then the index procedure:
 
-~(define new-data (index ('all (1 . 3) 0) data)~
+~(define new-data (index '(all (1 . 3) 0) data)~
 
 Would set ~new-data~ to a new data structure of 3 dimensions, of shape 5x3x1. This
 is represented internally as a structure of shape 5x3, but the last

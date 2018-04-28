@@ -5,15 +5,23 @@ LDFLAGS=-L$(HOME)/.guix-profile/lib -lnetcdf -lhdf5 -fPIC
 # 	| mit-scheme --batch-mode
 
 clean:
-	rm netcdf-const* netcdf-types* netcdf-shim* 
+	rm netcdf-const* netcdf-types* netcdf-shim* netcdf.com \
+	netcdf.bci	netcdf.bin
 
-check : netcdf-shim.so netcdf-types.bin netcdf-const.bin
+check : netcdf.com
 	echo '(load "test-netcdf.scm")' \
 	| mit-scheme --batch-mode --library \
 	$(HOME)/.guix-profile/lib/mit-scheme-x86-64:$(PWD) \
 	--band all.com
 
-build: netcdf-shim.so netcdf-types.bin netcdf-const.bin
+build: netcdf.com
+	echo "(load-option 'ffi) (c-include \"netcdf\") (cf \"netcdf\")" \
+	| mit-scheme --batch-mode --library \
+	$(HOME)/.guix-profile/lib/mit-scheme-x86-64:$(PWD) \
+	--band all.com
+
+netcdf.com : netcdf-shim.so netcdf-types.bin netcdf-const.bin
+	echo
 
 netcdf-shim.so: netcdf-shim.o
 	echo "(link-shim)" \
