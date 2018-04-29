@@ -109,20 +109,20 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
     (define (build-processor var-meta)
       ;; makes a function for converted stored values to float,
       ;; i.e. if we have scale factors and offsets, etc.
-        (let* ((attrs (get 'atts var-meta))
+        (let* ((attrs (get var-meta 'atts))
                (fillv (if (assoc "_FillValue" attrs)
-                          (get "_FillValue" attrs)
+                          (get attrs "_FillValue")
                           (begin (newline)
                                  (display "WARNING - no fill value")
                                  nan)))
                (offset (if (assoc "add_offset" attrs)
-                           (get "add_offset" attrs)
+                           (get attrs "add_offset")
                            0))
                (scale (if (assoc "scale_factor" attrs)
-                          (get "scale_factor" attrs)
+                          (get attrs "scale_factor")
                           1))
                (valid_range (if (assoc "valid_range" attrs)
-                                (get "valid_range" attrs)
+                                (get attrs "valid_range")
                                 (list inf- inf+)))
                (min (car valid_range))
                (max (cadr valid_range)))
@@ -134,10 +134,10 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
                       nan ;;(error "value out of expected range")
                       value))))))
     
-    (let* ((ncid (get 'ncid var-meta))
-           (varid (get 'varid var-meta))
+    (let* ((ncid (get var-meta 'ncid))
+           (varid (get var-meta 'varid))
            (nelements (apply * (alist->list (get-list 'dims var-meta))))
-           (type (get 'xtype var-meta))
+           (type (get var-meta 'xtype))
            (alien-var (malloc (* nelements (get-c-sizeof type))
                               (string->symbol type)))
            (out (c-call "nc_get_var" ncid varid alien-var)))
@@ -152,9 +152,9 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
       (alien->vector alien-var nelements type (build-processor var-meta))))
 
   (define (add-dims variable)
-  (let* ((meta (get 'meta variable))
-         (ncid (get 'ncid meta))
-         (dims (get 'dims meta))
+  (let* ((meta (get variable 'meta))
+         (ncid (get meta 'ncid))
+         (dims (get meta 'dims))
          (keys (get-keys dims))
          (vals (alist->list dims))
          (loaded-dims
@@ -163,10 +163,10 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
                              keys))
               (map (lambda (key)
                      (pair key (make-var-data
-                                meta key (lambda (var) (get 'data var)))))
+                                meta key (lambda (var) (get var 'data)))))
                    keys)
               (begin (newline) (display "No dimesion data for ")
-                     (display (get 'name meta))
+                     (display (get meta 'name))
                      (display ", adding int index")
                      (map (lambda (key val)
                             (pair key
@@ -194,7 +194,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
                            (pair 'shape (alist->list
                                          (get-list 'dims var-meta)))))))
 
-(define (get key structure)
+(define (get structure key)
   (let ((value (assoc key structure)))
     (if value
         (let ((output (cdr value)))
@@ -203,7 +203,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
               output))
         (error "key not in structure" (list key (map get-key structure))))))
 
-(define (index coords variable)
+(define (index variable coords)
   ;; internal func
   (define (calc-index index-list shape)
       (let ((rev-index (reverse index-list))
@@ -221,8 +221,8 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
                             (fix:* mult (car shape)))))))))
   (define (slice-dimension new-dims variable)
     (let* ((idxs (map cadr new-dims))
-           (data (get 'data variable))
-           (shape (get 'shape variable))
+           (data (get variable 'data))
+           (shape (get variable 'shape))
            (new-shape (map length idxs))
            (new-length (apply * new-shape))
            (new-vec (make-vector new-length nan)))
@@ -373,7 +373,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
   (map get-key structure))
 
 (define (get-values structure)
-  (map (lambda (key) (get key structure)) (get-keys structure)))
+  (map (lambda (key) (get structure key)) (get-keys structure)))
 
 (define (get-key a-element)
   (car a-element))
@@ -405,7 +405,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
 ;; load functions
 (define (close-ncid metadata)
   ;; this is dangerous, introduces state, :(, run when done w/ file
-  (let* ((ncid (get 'ncid metadata))
+  (let* ((ncid (get metadata 'ncid))
          (out (C-call "nc_close" ncid)))
     (cond ((= 0 out) (newline) (display "closing sucessful"))
           ((= -33 out) (error "Not a netcdf id." ncid))
@@ -418,7 +418,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
 (define (load-var-meta metadata varname)
   (define (load-varid metadata var-name)
     (let* ((alien-varid (malloc (c-sizeof "int") 'int))
-           (ncid (get 'ncid metadata))
+           (ncid (get metadata 'ncid))
            (out (C-call "nc_inq_varid" ncid
                         (->cstring var-name) alien-varid)))
       (cond ((= 0 out) (newline) (display "loading varid sucessful"))
@@ -444,7 +444,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
         (add-element
          'dims
          (map (lambda (dimid)
-                (load-dim-meta (get 'ncid var-meta) dimid))
+                (load-dim-meta (get var-meta 'ncid) dimid))
               (get-list 'dimids var-meta))
          var-meta)))
 
@@ -465,15 +465,15 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
         (alien->string alien-name)))
     ;; get each name of att for loading by load-att
     (map (lambda (attnum)
-           (load-attname (get 'ncid var-meta)
-                         (get 'varid var-meta)
+           (load-attname (get var-meta 'ncid)
+                         (get var-meta 'varid)
                          attnum))
-         (list-tabulate (get 'natts var-meta) (lambda (x) x))))
+         (list-tabulate (get var-meta 'natts) (lambda (x) x))))
 
   (define (load-att var-meta name)
     ;; load and build attributes
-    (let* ((ncid (get 'ncid var-meta))
-           (varid (get 'varid var-meta))
+    (let* ((ncid (get var-meta 'ncid))
+           (varid (get var-meta 'varid))
            (xtype (malloc (c-sizeof "int") 'nc_type))
            (len (malloc (c-sizeof "ulong") 'size_t))
            (out (c-call "nc_inq_att" ncid varid name xtype len)))
@@ -500,8 +500,8 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
   (define (make-var-structure metadata varid alien-name alien-xtype
                               alien-ndims alien-dimids alien-natts)
     (let ((ndims (c-> alien-ndims "int") ))
-      `((filename . (,(get 'filename metadata)))
-        (ncid . (,(get 'ncid metadata)))
+      `((filename . (,(get metadata 'filename)))
+        (ncid . (,(get metadata 'ncid)))
         (name . (,(alien->string alien-name)))
         (varid . (,varid))
         (xtype . (,(alien->type alien-xtype)))
@@ -509,7 +509,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
         (dimids . ,(alien->list alien-dimids ndims "int"))
         (natts . (,(c-> alien-natts "int"))))))
   
-  (let* ((ncid (get 'ncid metadata))
+  (let* ((ncid (get metadata 'ncid))
          (varid (load-varid metadata varname))
          (alien-name (malloc (* 80 (c-sizeof "char")) '(* char)))
          (alien-xtype (malloc (c-sizeof "int") 'nc_type))

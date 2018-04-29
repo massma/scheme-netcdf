@@ -45,10 +45,10 @@ Make sure the repo's directory is in your library path (see --library in
 
 - ~(get-keys structure)~ :: get list of all keys in ~structure~ .
 
-- ~(get key structure)~ :: select element defined by ~key~ in
+- ~(get structure key)~ :: select element defined by ~key~ in
      ~structure~ .
 
-- ~(index coords variable)~ :: return a new data variable structure
+- ~(index variable coords)~ :: return a new data variable structure
      indexed by ~coords~. Coords should be a list corresponding to the
      number of dimensions of variable. Each element of the coords list
      can be a symbol ~'all~ (for a slice with all coordinates of that
@@ -69,7 +69,7 @@ Say we have a data variable structure called ~data~ of 3 dimensions
 
 Then the index procedure:
 
-~(define new-data (index '(all (1 . 3) 0) data)~
+~(define new-data (index data '(all (1 . 3) 0))~
 
 Would set ~new-data~ to a new data structure of 3 dimensions, of shape
 5x3x1. This is represented internally as a structure of shape 5x3, but
@@ -77,13 +77,12 @@ the last coordinate is preserved in new-data's structural element
 ~single-dimensions~. So this new data structure would have the following
 characteristics:
 
-
 #+BEGIN_SRC scheme
-  (get 'shape new-data)
+  (get new-data 'shape)
   ;; (5 3)
-  (get 'single-dimensions new-data)
+  (get new-data 'single-dimensions)
   ;; ('z'  0)
-  (get 'dimensions new-data)
+  (get new-data 'dimensions)
   ;; (('x' (0 1 2 3 4 5)) ('y' (1 2 3)))
 #+END_SRC
 
