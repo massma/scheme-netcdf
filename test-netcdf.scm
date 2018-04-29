@@ -1,12 +1,28 @@
+#| -*-Scheme-*-
+
+Copyright (C) 2018 Adam Massmann <massmannak@gmail.com>
+
+This file is part of scheme-netcdf.
+
+scheme-netcdf is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 3 of the License, or (at
+your option) any later version.
+
+scheme-netcdf is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
+
+|#
+
 (load-option 'ffi)
 (c-include "netcdf")
 (load "netcdf")
 (load "test-manager/load")
-
-(with-working-directory-pathname
- "testing" (lambda ()
-             (run-shell-command "make gen-version.exe")
-             (run-shell-command "make simple_xy_nc4.nc")))
 
 (define nc-filename "./testing/simple_xy_nc4.nc")
 

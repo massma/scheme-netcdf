@@ -12,9 +12,9 @@ Playing around with MIT/GNU Scheme's FFI, with the goal of getting netcdf functi
 ** Build Instructions
 
 1. clone repository
-2. ~git submodule init && git submodule update~ :: load Alexey Radul's
+2. ~git submodule init && git submodule update~ load Alexey Radul's
       [[https://github.com/axch/test-manager][test-manager]] for make check.
-3. ~make check~ :: builds package and runs some simple tests.
+3. ~make check~ builds package and runs some simple tests.
 
 Note that everything /should/ just work if you installed MIT/GNU Scheme,
 gcc, and netcdf through [[https://www.gnu.org/software/guix/][GNU Guix]]. If you do not use Guix as your package
@@ -26,7 +26,7 @@ More documentation to come, also this is all still in development and
 likely to change.
 
 Make sure the repo's directory is in your library path (see --library in
-[[info:mit-scheme-user#Unix%20Installation][documentation]] documentation). To load package just run below:
+[[info:mit-scheme-user#Unix%20Installation][documentation]]). To load package just run below:
 
 #+BEGIN_SRC scheme
   (load-option 'ffi)
@@ -49,7 +49,7 @@ Make sure the repo's directory is in your library path (see --library in
      ~structure~ .
 
 - ~(index coords variable)~ :: return a new data variable structure
-     indexed by ~coords~. Coords should be list corresponding to the
+     indexed by ~coords~. Coords should be a list corresponding to the
      number of dimensions of variable. Each element of the coords list
      can be a symbol ~'all~ (for a slice with all coordinates of that
      dimension), a pair [~(low . high)~] for a slice of all coordinates
@@ -71,9 +71,9 @@ Then the index procedure:
 
 ~(define new-data (index '(all (1 . 3) 0) data)~
 
-Would set ~new-data~ to a new data structure of 3 dimensions, of shape 5x3x1. This
-is represented internally as a structure of shape 5x3, but the last
-coordinate is preserved in new-data's structural element
+Would set ~new-data~ to a new data structure of 3 dimensions, of shape
+5x3x1. This is represented internally as a structure of shape 5x3, but
+the last coordinate is preserved in new-data's structural element
 ~single-dimensions~. So this new data structure would have the following
 characteristics:
 

@@ -1,3 +1,7 @@
+/* 
+Example script copied from:
+https://www.unidata.ucar.edu/software/netcdf/docs/simple_xy_nc4_wr_8c-example.html 
+*/
 #include <stdlib.h>
 #include <stdio.h>
 #include <netcdf.h>
