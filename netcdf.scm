@@ -136,7 +136,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
     
     (let* ((ncid (get var-meta 'ncid))
            (varid (get var-meta 'varid))
-           (nelements (apply * (alist->list (get-list 'dims var-meta))))
+           (nelements (apply * (alist->list (get-list var-meta 'dims))))
            (type (get var-meta 'xtype))
            (alien-var (malloc (* nelements (get-c-sizeof type))
                               (string->symbol type)))
@@ -192,7 +192,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
     (post-processing (list (pair 'data var-data)
                            (pair 'meta var-meta)
                            (pair 'shape (alist->list
-                                         (get-list 'dims var-meta)))))))
+                                         (get-list var-meta 'dims)))))))
 
 (define (get structure key)
   (let ((value (assoc key structure)))
@@ -216,7 +216,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
                             (if (assoc dim-key unformat-coords)
                                 (cdr (assoc dim-key unformat-coords))
                                 'all))
-                          (get-keys (get variable 'dimensions)))
+                          (get-keys (get-list variable 'dimensions)))
                      unformat-coords))
   ;; internal func
   (define (calc-index index-list shape)
@@ -336,8 +336,8 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
                     (loop (fix:+ i 1))))))))
   ;; return data element closes to the given coords
   ;; from the labelled data structure
-  (let ((dimensions (get-list 'dimensions variable))
-        (single-dims (get-list 'single-dimensions variable))
+  (let ((dimensions (get-list variable 'dimensions))
+        (single-dims (get-list variable 'single-dimensions))
         (new-var (del-assoc
                   'dimensions
                   (del-assoc 'data
@@ -375,7 +375,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
 (define (add-element key value structure)
   (cons (pair key value) structure))
 
-(define (get-list key structure)
+(define (get-list structure key)
   ;; differs from above in that gaurantees to send a list
   ;; e.g. if you need it for map on length = 1 elements
   (let ((value (assoc key structure)))
@@ -459,7 +459,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
          'dims
          (map (lambda (dimid)
                 (load-dim-meta (get var-meta 'ncid) dimid))
-              (get-list 'dimids var-meta))
+              (get-list var-meta 'dimids))
          var-meta)))
 
   (define (load-att-names var-meta)
