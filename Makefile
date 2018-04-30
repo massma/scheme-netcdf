@@ -28,7 +28,8 @@ clean:
 	rm -f netcdf-const* netcdf-types* netcdf-shim* netcdf.com \
 	netcdf.bci	netcdf.bin $(TEST_OBJECTS)
 
-check : netcdf.com testing/gen-version.exe testing/simple_xy_nc4.nc
+check : netcdf.com testing/gen-version.exe testing/simple_xy_nc4.nc \
+test-netcdf.scm
 	echo '(load "test-netcdf.scm")' \
 	| mit-scheme --batch-mode --library \
 	$(HOME)/.guix-profile/lib/mit-scheme-x86-64:$(PWD) \
@@ -47,7 +48,7 @@ testing/gen-data.exe : testing/simple_xy_nc4_wr.c
 # build stuff
 build: netcdf.com
 
-netcdf.com : netcdf-shim.so netcdf-types.bin netcdf-const.bin
+netcdf.com : netcdf-shim.so netcdf-types.bin netcdf-const.bin netcdf.scm
 	echo "(load-option 'ffi) (c-include \"netcdf\") (cf \"netcdf\")" \
 	| mit-scheme --batch-mode --library \
 	$(HOME)/.guix-profile/lib/mit-scheme-x86-64:$(PWD) \

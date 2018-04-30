@@ -203,7 +203,21 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
               output))
         (error "key not in structure" (list key (map get-key structure))))))
 
-(define (index variable coords)
+(define (index variable unformat-coords)
+  ;; added below to allow for named coordinates
+  (define (named? coords)
+    ;; note below does not allow for string coordinates, but our indexing
+    ;; doesn't really either
+    (if (pair? (car coords))
+        (string? (car (car coords)))
+        (string? (car coords))))
+  (define coords (if (named? unformat-coords)
+                     (map (lambda (dim-key)
+                            (if (assoc dim-key unformat-coords)
+                                (cdr (assoc dim-key unformat-coords))
+                                'all))
+                          (get-keys (get variable 'dimensions)))
+                     unformat-coords))
   ;; internal func
   (define (calc-index index-list shape)
       (let ((rev-index (reverse index-list))
@@ -491,9 +505,9 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
                   (if (not (equal? out 0))
                       (error "failed to load attribute, code: " out)
                       (if (equal? type "char")
-                          (utf8->string
-                           (list->bytevector
-                            (alien->list alien-data nelements type)))
+                          (list->string
+                           (map ascii->char
+                                (alien->list alien-data nelements type)))
                           (alien->list alien-data nelements type)))))))
         (pair name (loader)))))
 

@@ -62,20 +62,38 @@ Make sure the repo's directory is in your library path (see --library in
      that are equal to low and high. An example might be appropriate,
      see below.
 
+     Alternatively, you can also name coordinates. The advantage of this
+     is that you do not need to match the order of the coords list with
+     the order of the data. To do this, pass an alist associating
+     coordinate names with the values of coords you want, as above. Any
+     coordinate name that is not included in the list will be selected
+     assuming you want all coordinate values. See examples below.
+
+     
+
 ** Index Example
 
 Say we have a data variable structure called ~data~ of 3 dimensions
-('x', 'y', 'z'), with each dimension having 5 coordinates equal to ~(0 1 2 3 4)~. 
+('x', 'y', 'z'), with each dimension having 5 coordinates equal to ~(0 1
+2 3 4)~. We can index this with either un-named or named coordinate lists.
 
-Then the index procedure:
+For un-named coordinate lists the index procedure is:
 
 ~(define new-data (index data '(all (1 . 3) 0))~
 
-Would set ~new-data~ to a new data structure of 3 dimensions, of shape
-5x3x1. This is represented internally as a structure of shape 5x3, but
-the last coordinate is preserved in new-data's structural element
-~single-dimensions~. So this new data structure would have the following
-characteristics:
+For named coordinate lists the index procedure is:
+
+~(define new-data (index data '(("y" . (1 . 3)) ("z" . 0))~
+
+Note that in the named example the order does not matter, but in the
+un-named example the order of supplied coordinates must match the order
+of the data's dimensions.
+
+Both the index syntaxes would set ~new-data~ to a new data structure of
+3 dimensions, of shape 5x3x1. This is represented internally as a
+structure of shape 5x3, but the last coordinate is preserved in
+new-data's structural element ~single-dimensions~. So this new data
+structure would have the following characteristics:
 
 #+BEGIN_SRC scheme
   (get new-data 'shape)
@@ -85,6 +103,4 @@ characteristics:
   (get new-data 'dimensions)
   ;; (('x' (0 1 2 3 4 5)) ('y' (1 2 3)))
 #+END_SRC
-
-
 

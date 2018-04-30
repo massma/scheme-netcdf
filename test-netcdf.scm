@@ -49,6 +49,8 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
          (var (make-var-data meta "data"))
          (data (get var 'data))
          (dimensions (get var 'dimensions)))
+    (check (equal? (index var (list 'all 3))
+                   (index var (list (cons "y" 3)))))
     (check (equal? data (list->vector (list-tabulate 72 (lambda (x) x))))
            "loaded data unequal to expected values")
     (check (equal? (get dimensions "x")
