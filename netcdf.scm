@@ -222,6 +222,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
   (define (calc-index index-list shape)
       (let ((rev-index (reverse index-list))
             (rev-shape (reverse shape)))
+        ;;(bkpt rev-index rev-shape)
         (fix:+ (car rev-index)
                (let loop ((index (cdr rev-index))
                           (shape rev-shape)
@@ -236,30 +237,30 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
   (define (slice-dimension new-dims variable)
     (let* ((idxs (map cadr new-dims))
            (data (get variable 'data))
-           (shape (get variable 'shape))
+           (shape (get-list variable 'shape))
            (new-shape (map length idxs))
            (new-length (apply * new-shape))
            (new-vec (make-vector new-length nan)))
       (define (advance-index-list old-idxs)
-      (let ((reverse-idx (reverse old-idxs)))
-        (let ((advanced-index
-               (cons (cdr (car reverse-idx))
-                     (cdr reverse-idx))))
-          (reverse
-           (let loop ((new-index advanced-index)
-                      (orig-index (reverse idxs)))
-             (if (null? (cdr new-index))
-                 new-index              ;'()
-                 (let ((first (car new-index))
-                       (second (cadr new-index)))
-                   (if (null? first)
-                       ;; reset first and advance second
-                       (cons (car orig-index)
-                             (loop (cons (cdr second) (cddr new-index))
-                                   (cdr orig-index)))
-                       ;; else, advance loop
-                       (cons first (loop (cdr new-index)
-                                         (cdr orig-index)))))))))))
+        (let ((reverse-idx (reverse old-idxs)))
+          (let ((advanced-index
+                 (cons (cdr (car reverse-idx))
+                       (cdr reverse-idx))))
+            (reverse
+             (let loop ((new-index advanced-index)
+                        (orig-index (reverse idxs)))
+               (if (null? (cdr new-index))
+                   new-index            ;'()
+                   (let ((first (car new-index))
+                         (second (cadr new-index)))
+                     (if (null? first)
+                         ;; reset first and advance second
+                         (cons (car orig-index)
+                               (loop (cons (cdr second) (cddr new-index))
+                                     (cdr orig-index)))
+                         ;; else, advance loop
+                         (cons first (loop (cdr new-index)
+                                           (cdr orig-index)))))))))))
       (let loop-idx ((i 0)
                      (index-list idxs)
                      (loop-list idxs)
@@ -354,8 +355,11 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
                          (add-element 'data
                                       (slice-dimension new-dims variable)
                                       (add-element 'shape
-                                                   (map vector-length
-                                                        (get-values dims))
+                                                   (filter
+                                                    (lambda (x)
+                                                      (> x 1))
+                                                    (map vector-length
+                                                      (get-values dims)))
                                                    new-var))))
                (new-single-dims (filter (lambda (x)
                                           (< (vector-length (get-value x)) 2))

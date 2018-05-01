@@ -17,7 +17,8 @@
 
 LDFLAGS=-L$(HOME)/.guix-profile/lib -lnetcdf -lhdf5 -fPIC
 TEST_OBJECTS = testing/simple_xy_nc4.nc testing/gen-data.exe \
-testing/gen-version.exe
+testing/gen-version.exe testing/gen-xyz-data.exe \
+testing/simple_xyz_nc4.nc
 .PHONY: build clean
 
 # install: build
@@ -29,7 +30,7 @@ clean:
 	netcdf.bci	netcdf.bin $(TEST_OBJECTS)
 
 check : netcdf.com testing/gen-version.exe testing/simple_xy_nc4.nc \
-test-netcdf.scm
+testing/simple_xyz_nc4.nc test-netcdf.scm 
 	echo '(load "test-netcdf.scm")' \
 	| mit-scheme --batch-mode --library \
 	$(HOME)/.guix-profile/lib/mit-scheme-x86-64:$(PWD) \
@@ -42,7 +43,13 @@ testing/gen-version.exe : testing/gen-version.c
 testing/simple_xy_nc4.nc : testing/gen-data.exe
 	cd testing && ./gen-data.exe
 
+testing/simple_xyz_nc4.nc : testing/gen-xyz-data.exe
+	cd testing && ./gen-xyz-data.exe
+
 testing/gen-data.exe : testing/simple_xy_nc4_wr.c
+	gcc -Wall -o $@ -lnetcdf $<
+
+testing/gen-xyz-data.exe : testing/simple_xyz.c
 	gcc -Wall -o $@ -lnetcdf $<
 
 # build stuff
