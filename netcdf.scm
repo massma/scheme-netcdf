@@ -154,7 +154,7 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
   (define (add-dims variable)
   (let* ((meta (get variable 'meta))
          (ncid (get meta 'ncid))
-         (dims (get meta 'dims))
+         (dims (get-list meta 'dims))
          (keys (get-keys dims))
          (vals (alist->list dims))
          (loaded-dims
