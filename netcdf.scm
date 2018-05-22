@@ -208,6 +208,8 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
 
 (define (index variable unformat-coords #!optional int-idx)
   ;; added below to allow for named coordinates
+  (if (or (default-object? int-idx) (null? int-idx))
+      (set! int-idx #f))
   (define (named? coords)
     ;; note below does not allow for string coordinates, but our indexing
     ;; doesn't really either
@@ -307,15 +309,8 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
     ;; takes a list of coordinates (do not need to be exact
     ;; outputs a list two elements: vector of exact coordinates,
     ;; and index of list
-    (if (default-object? int-idx)
-        ;; index are coordinates
-        (let ((vec (get-value dimension)))
-          (cond ((pair? val) (slice-vector val vec))
-                ((equal? val 'all) (list vec (list-tabulate (vector-length vec)
-                                                            (lambda (x) x))))
-                ;; should modify below so idx in list
-                ((number? val) (select-coords val vec)) 
-                (else (error "invalid slice"))))
+    (if int-idx
+        ;; index are integer locations
         (let ((vec (get-value dimension)))
           ;; index are integer locations
           (cond ((pair? val) (list (subvector vec (car val) (cdr val))
@@ -327,6 +322,14 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
                 ;; should modify below so idx in list
                 ((number? val) (list (vector (vector-ref vec val))
                                      (list val))) 
+                (else (error "invalid slice"))))
+        ;; index are coordinates
+        (let ((vec (get-value dimension)))
+          (cond ((pair? val) (slice-vector val vec))
+                ((equal? val 'all) (list vec (list-tabulate (vector-length vec)
+                                                            (lambda (x) x))))
+                ;; should modify below so idx in list
+                ((number? val) (select-coords val vec)) 
                 (else (error "invalid slice"))))))
 
   (define (select-coords val vec)
