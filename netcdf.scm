@@ -176,9 +176,12 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
          (dimensions (filter (lambda (x)
                                (> (vector-length (get-value x)) 1))
                              loaded-dims))
-         (single-dimensions (filter (lambda (x)
-                                      (< (vector-length (get-value x)) 2))
-                                    loaded-dims)))
+         (single-dimensions (map (lambda (x)
+                                   (pair (get-key x)
+                                         (vector-ref (get-value x) 0)))
+                                 (filter (lambda (x)
+                                           (< (vector-length (get-value x)) 2))
+                                         loaded-dims))))
     (add-element 'single-dimensions
                  single-dimensions
                  (add-element 'dimensions
@@ -361,9 +364,12 @@ along with scheme-netcdf; if not, see <http://www.gnu.org/licenses/>
                                                     (map vector-length
                                                       (get-values dims)))
                                                    new-var))))
-               (new-single-dims (filter (lambda (x)
-                                          (< (vector-length (get-value x)) 2))
-                                        dims)))
+               (new-single-dims (map (lambda (x)
+                                       (pair (get-key x)
+                                             (vector-ref (get-value x) 0)))
+                                     (filter (lambda (x)
+                                               (< (vector-length (get-value x)) 2))
+                                             dims))))
           (add-element 'single-dimensions
                        (append new-single-dims single-dims)
                        new-var))
