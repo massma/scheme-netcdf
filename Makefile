@@ -25,12 +25,11 @@ testing/simple_xyz_nc4.nc
 # 	echo '(install-shim "$(DESTDIR)" "netcdf")' \
 # 	| mit-scheme --batch-mode
 
-clean:
-	rm -f netcdf-const* netcdf-types* netcdf-shim* netcdf.com \
-	netcdf.bci	netcdf.bin $(TEST_OBJECTS)
+# build stuff
+build: netcdf.com
 
 check : netcdf.com testing/gen-version.exe testing/simple_xy_nc4.nc \
-testing/simple_xyz_nc4.nc test-netcdf.scm 
+testing/simple_xyz_nc4.nc test-netcdf.scm
 	echo '(load "test-netcdf.scm")' \
 	| mit-scheme --batch-mode --library \
 	$(HOME)/.guix-profile/lib/mit-scheme-x86-64:$(PWD) \
@@ -52,8 +51,6 @@ testing/gen-data.exe : testing/simple_xy_nc4_wr.c
 testing/gen-xyz-data.exe : testing/simple_xyz.c
 	gcc -Wall -o $@ -lnetcdf $<
 
-# build stuff
-build: netcdf.com
 
 netcdf.com : netcdf-shim.so netcdf-types.bin netcdf-const.bin netcdf.scm
 	echo "(load-option 'ffi) (c-include \"netcdf\") (cf \"netcdf\")" \
@@ -85,3 +82,6 @@ netcdf-const: netcdf-const.o
 netcdf-const.o: netcdf-const.c
 	gcc `pkg-config --cflags netcdf` $(CFLAGS) -o $@ -c $<
 
+clean:
+	rm -f netcdf-const* netcdf-types* netcdf-shim* netcdf.com \
+	netcdf.bci	netcdf.bin $(TEST_OBJECTS)
